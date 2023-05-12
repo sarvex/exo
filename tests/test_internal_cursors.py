@@ -330,10 +330,7 @@ def test_insert_forward_orelse():
     @proc
     def example_old():
         x: f32
-        if 1 < 2:
-            x = 1.0
-        else:
-            x = 2.0
+        x = 1.0 if 1 < 2 else 2.0
 
     x1_old = _find_stmt(example_old, "x = 1.0")
     x2_old = _find_stmt(example_old, "x = 2.0")
@@ -351,12 +348,7 @@ def test_double_insert_forwarding(golden):
     @proc
     def proc_s1():
         x: f32
-        if 1 < 2:
-            x = 1.0
-            # x = 2.0  (added in s2)
-        else:
-            x = 3.0
-            # x = 4.0  (added in s3)
+        x = 1.0 if 1 < 2 else 3.0
 
     x1_s1 = _find_stmt(proc_s1, "x = 1.0")
     x3_s1 = _find_stmt(proc_s1, "x = 3.0")
@@ -438,13 +430,10 @@ def test_block_replace_forward_node(proc_bar, old, new):
 
 
 def test_cursor_pretty_print_nodes(proc_bar, golden):
-    output = []
-
     ir = proc_bar._loopir_proc
 
     root = Cursor.create(ir)
-    output.append(_print_cursor(root))
-
+    output = [_print_cursor(root)]
     c = _find_stmt(ir, "for i in _: _")
     output.append(_print_cursor(c))
 
@@ -461,11 +450,8 @@ def test_cursor_pretty_print_nodes(proc_bar, golden):
 
 
 def test_cursor_pretty_print_gaps(proc_bar, golden):
-    output = []
-
     c = _find_stmt(proc_bar, "x: f32").before()
-    output.append(_print_cursor(c))
-
+    output = [_print_cursor(c)]
     c = _find_stmt(proc_bar, "for i in _: _").before()
     output.append(_print_cursor(c))
 
@@ -485,11 +471,8 @@ def test_cursor_pretty_print_gaps(proc_bar, golden):
 
 
 def test_cursor_pretty_print_blocks(proc_bar, golden):
-    output = []
-
     c = _find_stmt(proc_bar, "for j in _: _").as_block()
-    output.append(_print_cursor(c))
-
+    output = [_print_cursor(c)]
     c = _find_cursors(proc_bar, "x = 1.0; _; x = 3.0")[0]
     output.append(_print_cursor(c))
 
@@ -679,7 +662,6 @@ def test_move_forward_diff_scopes_1(golden):
 def test_move_forward_diff_scopes_2():
     @proc
     def foo():
-        pass
         for i in seq(0, 4):
             x: i8
             y: i8
@@ -697,7 +679,6 @@ def test_move_forward_diff_scopes_2():
             x: i8
             y: i8
             z: i8
-        pass
 
     alloc_xy = foo.find("x: _")._impl.as_block().expand(0, 1)
     pass_c = foo.find("pass")._impl

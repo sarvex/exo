@@ -83,9 +83,7 @@ class InferEffects:
     def __init__(self, proc):
         self.orig_proc = proc
 
-        self._types = {}
-        for a in proc.args:
-            self._types[a.name] = a.type
+        self._types = {a.name: a.type for a in proc.args}
         self.rec_stmts_types(self.orig_proc.body)
 
         body, eff = self.map_stmts(self.orig_proc.body)
@@ -124,8 +122,6 @@ class InferEffects:
             self._types[stmt.name] = stmt.type
         elif isinstance(stmt, LoopIR.WindowStmt):
             self._types[stmt.lhs] = stmt.rhs.type
-        else:
-            pass
 
     def map_stmts(self, body):
         assert len(body) > 0
@@ -218,9 +214,7 @@ class InferEffects:
                         pass  # handle below
                     elif isinstance(arg, LoopIR.Read):
                         subst[sig.name] = arg.name
-                    elif isinstance(arg, LoopIR.ReadConfig):
-                        pass  # ?
-                    else:
+                    elif not isinstance(arg, LoopIR.ReadConfig):
                         assert False, "bad case"
                 elif sig.type.is_indexable() or sig.type is T.bool:
                     # in this case we have a LoopIR expression...
@@ -236,9 +230,8 @@ class InferEffects:
 
             # translate effects occuring on windowed arguments
             for sig, arg in zip(stmt.f.args, stmt.args):
-                if sig.type.is_numeric():
-                    if isinstance(arg.type, T.Window):
-                        eff = self.translate_eff(eff, sig.name, arg.type)
+                if sig.type.is_numeric() and isinstance(arg.type, T.Window):
+                    eff = self.translate_eff(eff, sig.name, arg.type)
 
             return LoopIR.Call(stmt.f, stmt.args, eff, stmt.srcinfo)
 
@@ -259,20 +252,19 @@ class InferEffects:
     # extract effects from this expression; return E.effect
     def eff_e(self, e):
         if isinstance(e, LoopIR.Read):
-            if e.type.is_numeric():
-                # we may assume that we're not in a call-argument position
-                assert e.type.is_real_scalar()
-                loc = [lift_expr(idx) for idx in e.idx]
-                eff = eff_read(e.name, loc, e.srcinfo)
-
-                # x[...], x
-                buf_typ = self._types[e.name]
-                if isinstance(buf_typ, T.Window):
-                    eff = self.translate_eff(eff, e.name, buf_typ)
-
-                return eff
-            else:
+            if not e.type.is_numeric():
                 return eff_null(e.srcinfo)
+            # we may assume that we're not in a call-argument position
+            assert e.type.is_real_scalar()
+            loc = [lift_expr(idx) for idx in e.idx]
+            eff = eff_read(e.name, loc, e.srcinfo)
+
+            # x[...], x
+            buf_typ = self._types[e.name]
+            if isinstance(buf_typ, T.Window):
+                eff = self.translate_eff(eff, e.name, buf_typ)
+
+            return eff
         elif isinstance(e, LoopIR.BinOp):
             return eff_concat(self.eff_e(e.lhs), self.eff_e(e.rhs), srcinfo=e.srcinfo)
         elif isinstance(e, LoopIR.USub):
@@ -508,7 +500,7 @@ class CheckEffects:
         self.config_env = ChainMap()
         self.errors = []
 
-        self.stride_sym = dict()
+        self.stride_sym = {}
 
         self.solver = _get_smt_solver()
 
@@ -547,7 +539,7 @@ class CheckEffects:
         self.pop()
 
         # do error checking here
-        if len(self.errors) > 0:
+        if self.errors:
             raise TypeError(
                 "Errors occurred during effect checking:\n" + "\n".join(self.errors)
             )
@@ -556,11 +548,11 @@ class CheckEffects:
         smt_syms = [smt for sym, smt in self.env.items() if smt.get_type() == SMT.INT]
         val_map = self.solver.get_py_values(smt_syms)
 
-        mapping = []
-        for sym, smt in self.env.items():
-            if smt.get_type() == SMT.INT:
-                mapping.append(f" {sym} = {val_map[smt]}")
-
+        mapping = [
+            f" {sym} = {val_map[smt]}"
+            for sym, smt in self.env.items()
+            if smt.get_type() == SMT.INT
+        ]
         return ",".join(mapping)
 
     def push(self):
@@ -744,11 +736,11 @@ class CheckEffects:
         strides[-1] = 1
         for i, sz in reversed(list(enumerate(shape))):
             if i > 0:
-                if not isinstance(sz, LoopIR.Const):
-                    break
-                else:
+                if isinstance(sz, LoopIR.Const):
                     strides[i - 1] = sz.val * strides[i]
 
+                else:
+                    break
         # for all statically knowable strides, set the appropriate variable.
         for dim, s in enumerate(strides):
             if s is not None:
@@ -879,11 +871,11 @@ class CheckEffects:
         #                NOT_CONFLICTS(i, n, w, w)
         for w1 in eff.writes:
             for w2 in eff.writes:
-                if w1.buffer == w2.buffer:
-                    # If we're writing a loop invariant value to
-                    # the same buffer, that is safe
-                    if iter not in LoopIR_Dependencies(w1.buffer, body).result():
-                        continue
+                if (
+                    w1.buffer == w2.buffer
+                    and iter not in LoopIR_Dependencies(w1.buffer, body).result()
+                ):
+                    continue
 
                 self.not_conflicts(iter, hi, w1, w2)
 
@@ -978,8 +970,6 @@ class CheckEffects:
                     dst = LoopIR.StrideExpr(dst_buf, dst_dim, T.stride, stmt.srcinfo)
                     eq = LoopIR.BinOp("==", src, dst, T.bool, stmt.srcinfo)
                     self.solver.add_assertion(self.expr_to_smt(lift_expr(eq)))
-            else:
-                pass
 
     def map_stmts(self, body):
         """Returns an effect for the argument `body`
@@ -1045,7 +1035,7 @@ class CheckEffects:
                 body_eff = eff_remove_buf(stmt.name, body_eff)
 
             elif isinstance(stmt, LoopIR.Call):
-                subst = dict()
+                subst = {}
                 for sig, arg in zip(stmt.f.args, stmt.args):
                     if sig.type.is_numeric():
                         # need to check that the argument shape

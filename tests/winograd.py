@@ -63,10 +63,10 @@ class wconv_3x3(nn.Module):
         return Y
 
 
+padding = 1
 for config in configs:
     print(config)
     N, C, H, W, K, kH, kW = config
-    padding = 1
     input = torch.randint(high=100, low=-100, size=(N, C, H, W)).float()
     weight = torch.randint(high=100, low=-100, size=(K, C, kH, kW)).float()
     output = F.conv2d(input, weight, padding=padding)

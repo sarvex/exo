@@ -118,11 +118,11 @@ class UAST_PPrinter:
     def push(self, only=None):
         if only is None:
             self.env = self.env.new_child()
-            self._tab = self._tab + "  "
+            self._tab = f"{self._tab}  "
         elif only == "env":
             self.env = self.env.new_child()
         elif only == "tab":
-            self._tab = self._tab + "  "
+            self._tab = f"{self._tab}  "
         else:
             assert False, f"BAD only parameter {only}"
 
@@ -142,19 +142,13 @@ class UAST_PPrinter:
             s = self.env[strnm]
             m = re.match("^(.*)_([0-9]*)$", s)
             # either post-pend a _1 or increment the post-pended counter
-            if not m:
-                s = s + "_1"
-            else:
-                s = f"{m[1]}_{int(m[2]) + 1}"
+            s = f"{s}_1" if not m else f"{m[1]}_{int(m[2]) + 1}"
             self.env[strnm] = s
             return s
 
     def get_name(self, nm):
         strnm = str(nm)
-        if strnm in self.env:
-            return self.env[strnm]
-        else:
-            return repr(nm)
+        return self.env[strnm] if strnm in self.env else repr(nm)
 
     def pproc(self, p):
         name = p.name or "_anon_"
@@ -182,7 +176,7 @@ class UAST_PPrinter:
         for stmt in body:
             if isinstance(stmt, UAST.Pass):
                 self.addline("pass")
-            elif isinstance(stmt, UAST.Assign) or isinstance(stmt, UAST.Reduce):
+            elif isinstance(stmt, (UAST.Assign, UAST.Reduce)):
                 op = "=" if isinstance(stmt, UAST.Assign) else "+="
 
                 rhs = self.pexpr(stmt.rhs)
@@ -375,7 +369,7 @@ def _print_proc(p, env: PrintEnv, indent: str) -> list[str]:
 
     lines = [f"{indent}def {p.name}({', '.join(args)}):"]
 
-    indent = indent + "  "
+    indent += "  "
 
     if p.instr:
         for i, line in enumerate(p.instr.split("\n")):
@@ -384,9 +378,7 @@ def _print_proc(p, env: PrintEnv, indent: str) -> list[str]:
             else:
                 lines.append(f"{indent}#        {line}")
 
-    for pred in p.preds:
-        lines.append(f"{indent}assert {_print_expr(pred, env)}")
-
+    lines.extend(f"{indent}assert {_print_expr(pred, env)}" for pred in p.preds)
     lines.extend(_print_block(p.body, env, indent))
 
     return lines
@@ -440,17 +432,17 @@ def _print_stmt(stmt, env: PrintEnv, indent: str) -> list[str]:
     elif isinstance(stmt, LoopIR.If):
         cond = _print_expr(stmt.cond, env)
         lines = [f"{indent}if {cond}:"]
-        lines.extend(_print_block(stmt.body, env.push(), indent + "  "))
+        lines.extend(_print_block(stmt.body, env.push(), f"{indent}  "))
         if stmt.orelse:
             lines.append(f"{indent}else:")
-            lines.extend(_print_block(stmt.orelse, env.push(), indent + "  "))
+            lines.extend(_print_block(stmt.orelse, env.push(), f"{indent}  "))
         return lines
 
     elif isinstance(stmt, LoopIR.Seq):
         hi = _print_expr(stmt.hi, env)
         body_env = env.push()
         lines = [f"{indent}for {body_env.get_name(stmt.iter)} in seq(0, {hi}):"]
-        lines.extend(_print_block(stmt.body, body_env, indent + "  "))
+        lines.extend(_print_block(stmt.body, body_env, f"{indent}  "))
         return lines
 
     assert False, f"unrecognized stmt: {type(stmt)}"
@@ -588,7 +580,7 @@ def _print_cursor_proc(
     args = [_print_fnarg(a, env) for a in p.args]
     lines = [f"{indent}def {p.name}({', '.join(args)}):{match_comment}"]
 
-    indent = indent + "  "
+    indent += "  "
 
     if cur == target:
         if p.instr:
@@ -598,9 +590,7 @@ def _print_cursor_proc(
                 else:
                     lines.append(f"{indent}#        {line}")
 
-        for pred in p.preds:
-            lines.append(f"{indent}assert {_print_expr(pred, env)}")
-
+        lines.extend(f"{indent}assert {_print_expr(pred, env)}" for pred in p.preds)
     lines.extend(_print_cursor_block(cur.body(), target, env, indent))
     return lines
 
@@ -629,15 +619,14 @@ def _print_cursor_block(
                 *if_cursor(target, lambda g: g.anchor(), local_stmt),
                 *if_cursor(target, lambda g: g.anchor().next(), more_stmts),
             ]
-        else:
-            assert target._type == GapType.After
-            return [
-                *if_cursor(target, lambda g: g.anchor().prev(), more_stmts),
-                *if_cursor(target, lambda g: g.anchor(), local_stmt),
-                f"{indent}[GAP - After]",
-                *if_cursor(target, lambda g: g.anchor().next(), local_stmt),
-                *if_cursor(target, lambda g: g.anchor().next(2), more_stmts),
-            ]
+        assert target._type == GapType.After
+        return [
+            *if_cursor(target, lambda g: g.anchor().prev(), more_stmts),
+            *if_cursor(target, lambda g: g.anchor(), local_stmt),
+            f"{indent}[GAP - After]",
+            *if_cursor(target, lambda g: g.anchor().next(), local_stmt),
+            *if_cursor(target, lambda g: g.anchor().next(2), more_stmts),
+        ]
 
     elif isinstance(target, Block) and target in cur:
         block = [f"{indent}# BLOCK START"]
@@ -670,11 +659,15 @@ def _print_cursor_stmt(
     if isinstance(stmt, LoopIR.If):
         cond = _print_expr(stmt.cond, env)
         lines = [f"{indent}if {cond}:"]
-        lines.extend(_print_cursor_block(cur.body(), target, env.push(), indent + "  "))
+        lines.extend(
+            _print_cursor_block(cur.body(), target, env.push(), f"{indent}  ")
+        )
         if stmt.orelse:
             lines.append(f"{indent}else:")
             lines.extend(
-                _print_cursor_block(cur.orelse(), target, env.push(), indent + "  ")
+                _print_cursor_block(
+                    cur.orelse(), target, env.push(), f"{indent}  "
+                )
             )
 
     elif isinstance(stmt, LoopIR.Seq):
@@ -682,7 +675,7 @@ def _print_cursor_stmt(
         body_env = env.push()
         lines = [
             f"{indent}for {body_env.get_name(stmt.iter)} in seq(0, {hi}):",
-            *_print_cursor_block(cur.body(), target, body_env, indent + "  "),
+            *_print_cursor_block(cur.body(), target, body_env, f"{indent}  "),
         ]
 
     else:

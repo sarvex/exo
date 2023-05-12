@@ -32,7 +32,7 @@ class Neon(Memory):
 
         vec_types = {"float": (4, "float32x4_t"), "double": (2, "float64x2_t")}
 
-        if not prim_type in vec_types.keys():
+        if prim_type not in vec_types:
             raise MemGenError(f"{srcinfo}: Neon vectors must be f32/f64 (for now)")
 
         reg_width, C_reg_type_name = vec_types[prim_type]
@@ -41,17 +41,14 @@ class Neon(Memory):
             raise MemGenError(
                 f"{srcinfo}: Neon vectors of type {prim_type} must be {reg_width}-wide, got {shape}"
             )
-        shape = shape[:-1]
-        if shape:
+        if shape := shape[:-1]:
             if not all(_is_some_const_size(s) for s in shape):
                 raise MemGenError(
                     f"{srcinfo}: Cannot allocate variable numbers of Neon vectors"
                 )
-            result = f'{C_reg_type_name} {new_name}[{"][".join(map(str, shape))}];'
+            return f'{C_reg_type_name} {new_name}[{"][".join(map(str, shape))}];'
         else:
-            result = f"{C_reg_type_name} {new_name};"
-
-        return result
+            return f"{C_reg_type_name} {new_name};"
 
     @classmethod
     def free(cls, new_name, prim_type, shape, srcinfo):

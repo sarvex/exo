@@ -180,7 +180,7 @@ def test_affine_index_range_fail():
     e = bar.find("for j in _:_").hi()._impl._node
     i_sym = bar.find("for i in _:_")._impl._node.iter
     e_range = IndexRangeAnalysis(e, {i_sym: (0, 5)}).result()
-    assert e_range == None
+    assert e_range is None
 
 
 def test_affine_index_range_fail1():
@@ -193,4 +193,4 @@ def test_affine_index_range_fail1():
     e = bar.find("for j in _:_").hi()._impl._node
     i_sym = bar.find("for i in _:_")._impl._node.iter
     e_range = IndexRangeAnalysis(e, {i_sym: (0, 5)}).result()
-    assert e_range == None
+    assert e_range is None

@@ -11,7 +11,7 @@ from .proc_eqv import get_repr_proc
 # --------------------------------------------------------------------------- #
 # Useful Basic Concepts and Structured Data
 
-_simple_proc_cache = dict()
+_simple_proc_cache = {}
 
 
 def get_simple_proc(proc):
@@ -51,24 +51,24 @@ class AWin:
         return f"({win.name}{coords})"
 
     def nslots(self):
-        return sum([not c.is_pt for c in self.coords])
+        return sum(not c.is_pt for c in self.coords)
 
     # compose with another AWin
-    def __add__(lhs, rhs):
+    def __add__(self, rhs):
         assert isinstance(rhs, AWin)
         # ignore rhs.name
         # check that the number of coordinates is compatible
-        assert lhs.nslots() == len(rhs.coords)
+        assert self.nslots() == len(rhs.coords)
         ri = 0
         coords = []
-        for lc in lhs.coords:
+        for lc in self.coords:
             if lc.is_pt:
                 coords.append(lc)
             else:
                 rc = rhs.coords[ri]
                 ri += 1
                 coords.append(AWinCoord(rc.is_pt, rc.val + lc.val))
-        return AWin(lhs.name, coords, lhs.strides)
+        return AWin(self.name, coords, self.strides)
 
     # apply to a point
     def __call__(self, pt):
@@ -96,7 +96,7 @@ def AWinAlloc(name, sizes):
     strides = [A.Stride(name, i, T.stride, null_srcinfo()) for i in range(len(sizes))]
 
     # fill out constant strides where possible
-    if len(strides) > 0:
+    if strides:
         strides[-1] = AInt(1)
         sprod = 1
         for i in reversed(range(len(sizes) - 1)):
@@ -177,20 +177,20 @@ class AEnv:
 
         return "".join([bstr(bd) for bd in self.bindings])
 
-    def __add__(lhs, rhs):
+    def __add__(self, rhs):
         assert isinstance(rhs, AEnv)
         result = AEnv()
         # compression optimization
-        if len(lhs.bindings) > 0 and len(rhs.bindings) > 0:
-            lb, rb = lhs.bindings[-1], rhs.bindings[0]
+        if len(self.bindings) > 0 and len(rhs.bindings) > 0:
+            lb, rb = self.bindings[-1], rhs.bindings[0]
             if isinstance(lb, BindingList) and isinstance(rb, BindingList):
                 mb = BindingList(lb.names + rb.names, lb.rhs + rb.rhs)
-                result.bindings = lhs.bindings[:-1] + [mb] + rhs.bindings[1:]
-                result.names = lhs.names.union(rhs.names)
+                result.bindings = self.bindings[:-1] + [mb] + rhs.bindings[1:]
+                result.names = self.names.union(rhs.names)
                 return result
         # otherwise
-        result.bindings = lhs.bindings + rhs.bindings
-        result.names = lhs.names.union(rhs.names)
+        result.bindings = self.bindings + rhs.bindings
+        result.names = self.names.union(rhs.names)
         return result
 
     def __call__(self, arg):
@@ -295,10 +295,7 @@ def AEnvPar(bind_dict, addnames=False):
 def filter_reals(e, changeset):
     def rec(e):
         if isinstance(e, A.ConstSym):
-            if e.name in changeset:
-                return A.Unk(e.type, e.srcinfo)
-            else:
-                return e
+            return A.Unk(e.type, e.srcinfo) if e.name in changeset else e
         elif isinstance(e, (A.Not, A.USub, A.ForAll, A.Exists, A.Definitely, A.Maybe)):
             return e.update(arg=rec(e.arg))
         elif isinstance(e, A.BinOp):
@@ -328,7 +325,7 @@ def lift_e(e):
             elif isinstance(w, LoopIR.Point):
                 return AWinCoord(is_pt=True, val=lift_e(w.pt))
             else:
-                assert False, f"bad w_access case"
+                assert False, "bad w_access case"
 
         # default strides
         strides = [A.Stride(e.name, i, T.stride, e.srcinfo) for i in range(len(e.idx))]
@@ -372,10 +369,13 @@ def lift_es(es):
 # Produce a set of AExprs which occur as right-hand-sides
 # of config writes.
 def possible_config_writes(stmts):
+
+
+
     class Find_RHS(LoopIR_Do):
         def __init__(self, stmts):
             # to collect the results in
-            self.writes = dict()
+            self.writes = {}
             self.windows = [AEnv()]
 
             self.do_stmts(stmts)
@@ -395,11 +395,11 @@ def possible_config_writes(stmts):
         def filter(self, name):
             for key in self.writes:
                 exprs = self.writes[key]
-                exprs = {e for e in exprs if name not in aeFV(e)}
-                if len(exprs) == 0:
-                    del self.writes[key]
-                else:
+                if exprs := {e for e in exprs if name not in aeFV(e)}:
                     self.writes[key] = exprs
+
+                else:
+                    del self.writes[key]
 
         def push(self):
             self.windows.append(self.windows[-1])
@@ -455,6 +455,7 @@ def possible_config_writes(stmts):
         def do_eff(self, eff):
             pass
 
+
     return Find_RHS(stmts).result()
 
 
@@ -492,7 +493,7 @@ def globenv(stmts):
 
             # We must now construct an environment that defines the
             # new value for variables `x` among the possibilities
-            newbinds = dict()
+            newbinds = {}
             for nm, oldv in oldvars.items():
                 # default to old-value
                 tcase = bvarmap.get(nm, oldv)
@@ -556,7 +557,7 @@ def globenv(stmts):
 
             # Now construct an environment that defines the new
             # value for variables `x` based on fixed-point conditions
-            newbinds = dict()
+            newbinds = {}
             for nm, bvar in bvarmap.items():
                 oldvar = A.Var(nm, bvar.type, s.srcinfo)
                 val = A.Select(
@@ -586,9 +587,6 @@ def globenv(stmts):
             call_env = call_bindings(s.args, sub_proc.args)
             aenvs += [call_env, sub_env]
 
-        else:
-            pass
-
     return aenv_join(aenvs)
 
 
@@ -597,9 +595,7 @@ def call_bindings(call_args, sig_args):
     aenvs = []
     for a, fa in zip(call_args, sig_args):
         if fa.type.is_numeric():
-            if isinstance(a, LoopIR.WindowExpr):
-                aenvs.append(AEnv(fa.name, lift_e(a)))
-            elif isinstance(a, LoopIR.ReadConfig):
+            if isinstance(a, (LoopIR.WindowExpr, LoopIR.ReadConfig)):
                 aenvs.append(AEnv(fa.name, lift_e(a)))
             else:
                 assert isinstance(a, LoopIR.Read)
@@ -616,7 +612,7 @@ def call_bindings(call_args, sig_args):
     return aenv_join(aenvs)
 
 
-_globenv_proc_cache = dict()
+_globenv_proc_cache = {}
 
 
 def globenv_proc(proc):
@@ -695,31 +691,19 @@ def LDiff(lhs, rhs):
 
 
 def LBigUnion(name, arg):
-    if isinstance(arg, LS.Empty):
-        return LS.Empty()
-    else:
-        return LS.BigUnion(name, arg)
+    return LS.Empty() if isinstance(arg, LS.Empty) else LS.BigUnion(name, arg)
 
 
 def LFilter(cond, arg):
-    if isinstance(arg, LS.Empty):
-        return LS.Empty()
-    else:
-        return LS.Filter(cond, arg)
+    return LS.Empty() if isinstance(arg, LS.Empty) else LS.Filter(cond, arg)
 
 
 def LLetEnv(env, arg):
-    if isinstance(arg, LS.Empty):
-        return LS.Empty()
-    else:
-        return LS.LetEnv(env, arg)
+    return LS.Empty() if isinstance(arg, LS.Empty) else LS.LetEnv(env, arg)
 
 
 def LHideAlloc(name, arg):
-    if isinstance(arg, LS.Empty):
-        return LS.Empty()
-    else:
-        return LS.HideAlloc(name, arg)
+    return LS.Empty() if isinstance(arg, LS.Empty) else LS.HideAlloc(name, arg)
 
 
 # pretty printing
@@ -742,10 +726,7 @@ def _lsstr(ls, prec=0):
             op, local_prec = "-", ls_prec["diff"]
         lhs = _lsstr(ls.lhs, prec=local_prec)
         rhs = _lsstr(ls.rhs, prec=local_prec + 1)
-        if local_prec < prec:
-            return f"({lhs} {op} {rhs})"
-        else:
-            return f"{lhs} {op} {rhs}"
+        return f"({lhs} {op} {rhs})" if local_prec < prec else f"{lhs} {op} {rhs}"
     elif isinstance(ls, LS.BigUnion):
         arg = _lsstr(ls.arg, prec=30)
         return f"∪{ls.name}.{arg}"
@@ -769,7 +750,7 @@ def __str__(ls):
 
 def is_elem(pt, ls, win_map=None, alloc_masks=None):
     # default arg
-    win_map = win_map or dict()
+    win_map = win_map or {}
     alloc_masks = alloc_masks or []
 
     if isinstance(ls, LS.Empty):
@@ -821,11 +802,11 @@ def is_elem(pt, ls, win_map=None, alloc_masks=None):
 
 
 def get_point_exprs(ls):
-    all_bufs = dict()
+    all_bufs = {}
 
     def _collect_buf(ls, win_map, alloc_masks):
         # default arg
-        win_map = win_map or dict()
+        win_map = win_map or {}
         alloc_masks = alloc_masks or []
 
         if isinstance(ls, LS.Empty):
@@ -856,7 +837,7 @@ def get_point_exprs(ls):
             _collect_buf(ls.arg, win_map, alloc_masks)
             alloc_masks.pop()
 
-    _collect_buf(ls, dict(), [])
+    _collect_buf(ls, {}, [])
 
     points = [
         APoint(nm, [AInt(Sym(f"i{i}")) for i in range(ndim)], typ)
@@ -914,7 +895,7 @@ def _effstr(eff, tab=""):
     if isinstance(eff, E.Empty):
         return f"{tab}∅"
     elif isinstance(eff, (E.Guard, E.Loop)):
-        lines = [_effstr(e, tab + "  ") for e in eff.body]
+        lines = [_effstr(e, f"{tab}  ") for e in eff.body]
         if isinstance(eff, E.Guard):
             lines = [f"{tab}Guard({eff.cond})"] + lines
         else:
@@ -978,9 +959,8 @@ def get_basic_locsets(effs):
     Alc = LS.Empty()
     for eff in reversed(effs):
         if isinstance(eff, E.Empty):
-            pass
-
-        elif isinstance(eff, E.GlobalRead):
+            continue
+        if isinstance(eff, E.GlobalRead):
             ls1 = LS.Point(eff.name, [], eff.type)
             RG = LUnion(ls1, RG)
         elif isinstance(eff, E.GlobalWrite):
@@ -1015,10 +995,11 @@ def get_basic_locsets(effs):
 
         elif isinstance(eff, (E.Guard, E.Loop)):
             bodyLs = get_basic_locsets(eff.body)
-            if isinstance(eff, E.Guard):
-                bodyLs = tuple(LFilter(eff.cond, Ls) for Ls in bodyLs)
-            else:
-                bodyLs = tuple(LBigUnion(eff.name, Ls) for Ls in bodyLs)
+            bodyLs = (
+                tuple(LFilter(eff.cond, Ls) for Ls in bodyLs)
+                if isinstance(eff, E.Guard)
+                else tuple(LBigUnion(eff.name, Ls) for Ls in bodyLs)
+            )
             bRG, bWG, bRH, bWH, bRed, bAlc = bodyLs
 
             # now do the full interaction updates...
@@ -1106,10 +1087,7 @@ def get_changing_globset(env):
 
 def expr_effs(e):
     if isinstance(e, LoopIR.Read):
-        if e.type.is_numeric():
-            return [E.Read(e.name, lift_es(e.idx))]
-        else:
-            return []
+        return [E.Read(e.name, lift_es(e.idx))] if e.type.is_numeric() else []
     elif isinstance(e, LoopIR.Const):
         return []
     elif isinstance(e, LoopIR.USub):
@@ -1177,9 +1155,9 @@ def stmts_effs(stmts):
             for fa, a in zip(s.f.args, s.args):
                 if fa.type.is_numeric() and isinstance(a, LoopIR.Read):
                     pass  # this is the case we want to skip
-                elif fa.type.is_numeric() and isinstance(a, LoopIR.ReadConfig):
-                    pass
-                else:
+                elif not fa.type.is_numeric() or not isinstance(
+                    a, LoopIR.ReadConfig
+                ):
                     effs += expr_effs(a)
             sub_proc = get_simple_proc(s.f)
             call_env = call_bindings(s.args, sub_proc.args)
@@ -1191,9 +1169,7 @@ def stmts_effs(stmts):
             effs += [E.Alloc(s.name, len(s.type.shape()))]
         elif isinstance(s, LoopIR.WindowStmt):
             effs += expr_effs(s.rhs)
-        elif isinstance(s, (LoopIR.Free, LoopIR.Pass)):
-            pass
-        else:
+        elif not isinstance(s, (LoopIR.Free, LoopIR.Pass)):
             assert False, f"bad case: {type(s)}"
 
         # secondly, insert global value modifications into
@@ -1203,17 +1179,16 @@ def stmts_effs(stmts):
     return effs
 
 
-_proc_effs_cache = dict()
+_proc_effs_cache = {}
 
 
 def proc_effs(proc):
     if proc not in _proc_effs_cache:
         _proc_effs_cache[proc] = stmts_effs(proc.body)
     return _proc_effs_cache[proc]
-    raise NotImplementedError("TODO")
 
 
-_proc_changeset_cache = dict()
+_proc_changeset_cache = {}
 
 
 def proc_changing_scalars(proc):
@@ -1223,7 +1198,7 @@ def proc_changing_scalars(proc):
 
 
 def get_changing_scalars(stmts, changeset=None, aliases=None):
-    aliases = aliases or dict()
+    aliases = aliases or {}
     changeset = changeset or set()
 
     def add_name(name):
@@ -1254,9 +1229,6 @@ def get_changing_scalars(stmts, changeset=None, aliases=None):
                 add_name(nm)
         elif isinstance(s, LoopIR.WindowStmt):
             aliases[s.lhs] = s.rhs.name
-        else:
-            pass
-
     return changeset
 
 
@@ -1293,11 +1265,10 @@ class ContextExtraction:
         for i, s in enumerate(stmts):
             if s is self.stmts[0]:
                 return ABool(True)
-            else:
-                p = self.ctrlp_s(s)
-                if p is not None:  # found the focused sub-tree
-                    G = globenv(stmts[0:i])
-                    return G(p)
+            p = self.ctrlp_s(s)
+            if p is not None:  # found the focused sub-tree
+                G = globenv(stmts[:i])
+                return G(p)
         return None
 
     def ctrlp_s(self, s):
@@ -1308,26 +1279,19 @@ class ContextExtraction:
             p = self.ctrlp_stmts(s.orelse)
             if p is not None:
                 return AAnd(ANot(lift_e(s.cond)), p)
-            return None
         elif isinstance(s, LoopIR.Seq):
             p = self.ctrlp_stmts(s.body)
             if p is not None:
                 G = self.loop_preenv(s)
                 bds = AAnd(AInt(0) <= AInt(s.iter), AInt(s.iter) < lift_e(s.hi))
                 return AAnd(bds, G(p))
-            return None
-        else:
-            return None
+        return None
 
     def preenv_stmts(self, stmts):
         for i, s in enumerate(stmts):
-            if s is self.stmts[0]:
-                preG = AEnv()
-            else:
-                preG = self.preenv_s(s)
-
+            preG = AEnv() if s is self.stmts[0] else self.preenv_s(s)
             if preG is not None:  # found the focused sub-tree
-                G = globenv(stmts[0:i])
+                G = globenv(stmts[:i])
                 return G + preG
         return None
 
@@ -1339,15 +1303,12 @@ class ContextExtraction:
             preG = self.preenv_stmts(s.orelse)
             if preG is not None:
                 return preG
-            return None
         elif isinstance(s, LoopIR.Seq):
             preG = self.preenv_stmts(s.body)
             if preG is not None:
                 G = self.loop_preenv(s)
                 return G + preG
-            return None
-        else:
-            return None
+        return None
 
     def posteff_stmts(self, stmts):
         for i, s in enumerate(stmts):
@@ -1359,7 +1320,7 @@ class ContextExtraction:
                 post_stmts = stmts[i + 1 :]
 
             if effs is not None:  # found the focused sub-tree
-                preG = globenv(stmts[0:i])
+                preG = globenv(stmts[:i])
                 return [E.BindEnv(preG)] + effs + stmts_effs(post_stmts)
         return None
 
@@ -1369,38 +1330,35 @@ class ContextExtraction:
             if effs is not None:
                 return [E.Guard(lift_e(s.cond), effs)]
             effs = self.posteff_stmts(s.orelse)
-            if effs is not None:
-                return [E.Guard(ANot(lift_e(s.cond)), effs)]
-            return None
+            return [E.Guard(ANot(lift_e(s.cond)), effs)] if effs is not None else None
         elif isinstance(s, LoopIR.Seq):
             body = self.posteff_stmts(s.body)
             if body is None:
                 return None
-            else:
-                orig_hi = lift_e(s.hi)
-                hi_sym = Sym("hi_tmp")
-                hi_env = AEnv(hi_sym, orig_hi)
+            orig_hi = lift_e(s.hi)
+            hi_sym = Sym("hi_tmp")
+            hi_env = AEnv(hi_sym, orig_hi)
 
-                bds = AAnd(AInt(0) <= AInt(s.iter), AInt(s.iter) < AInt(hi_sym))
-                bds_sym = Sym("bds_tmp")
-                hi_env = hi_env + AEnv(bds_sym, bds)
+            bds = AAnd(AInt(0) <= AInt(s.iter), AInt(s.iter) < AInt(hi_sym))
+            bds_sym = Sym("bds_tmp")
+            hi_env = hi_env + AEnv(bds_sym, bds)
 
-                G = self.loop_preenv(s)
+            G = self.loop_preenv(s)
 
-                guard_body = LoopIR.If(
-                    LoopIR.Read(bds_sym, [], T.bool, s.srcinfo),
-                    s.body,
-                    [],
-                    None,
-                    s.srcinfo,
-                )
-                G_body = globenv([guard_body])
-                return [
-                    E.BindEnv(hi_env),
-                    E.BindEnv(G),
-                    E.Guard(ABool(bds_sym), body),
-                    E.BindEnv(G_body),
-                ] + self.loop_posteff(s, LoopIR.Read(hi_sym, [], T.index, s.srcinfo))
+            guard_body = LoopIR.If(
+                LoopIR.Read(bds_sym, [], T.bool, s.srcinfo),
+                s.body,
+                [],
+                None,
+                s.srcinfo,
+            )
+            G_body = globenv([guard_body])
+            return [
+                E.BindEnv(hi_env),
+                E.BindEnv(G),
+                E.Guard(ABool(bds_sym), body),
+                E.BindEnv(G_body),
+            ] + self.loop_posteff(s, LoopIR.Read(hi_sym, [], T.index, s.srcinfo))
         else:
             return None
 
@@ -1439,14 +1397,12 @@ def Commutes(a1, a2):
     W1, R1, Red1, All1 = getsets([ES.WRITE_ALL, ES.READ_ALL, ES.REDUCE, ES.ALL], a1)
     W2, R2, Red2, All2 = getsets([ES.WRITE_ALL, ES.READ_ALL, ES.REDUCE, ES.ALL], a2)
 
-    pred = AAnd(
+    return AAnd(
         ADef(is_empty(LIsct(W1, All2))),
         ADef(is_empty(LIsct(W2, All1))),
         ADef(is_empty(LIsct(Red1, R2))),
         ADef(is_empty(LIsct(Red2, R1))),
     )
-
-    return pred
 
 
 def Commutes_Fissioning(a1, a2, aenv1, aenv2, a1_no_loop_var=False):
@@ -1497,7 +1453,7 @@ def Commutes_Fissioning(a1, a2, aenv1, aenv2, a1_no_loop_var=False):
         # a2 will always read the same values regardless of commuting
         write_commute12 = AOr(write_commute12, a1_idempotent)
 
-    pred = AAnd(
+    return AAnd(
         write_commute12,
         ADef(is_empty(LIsct(W2, All1))),
         ADef(is_empty(LIsct(Red1, R2))),
@@ -1506,15 +1462,14 @@ def Commutes_Fissioning(a1, a2, aenv1, aenv2, a1_no_loop_var=False):
         ADef(is_empty(LIsct(WG2, RG1))),
     )
 
-    return pred
-
 
 def AllocCommutes(a1, a2):
 
     Alc1, All1 = getsets([ES.ALLOC, ES.ALL], a1)
     Alc2, All2 = getsets([ES.ALLOC, ES.ALL], a2)
-    pred = AAnd(ADef(is_empty(LIsct(Alc1, All2))), ADef(is_empty(LIsct(Alc2, All1))))
-    return pred
+    return AAnd(
+        ADef(is_empty(LIsct(Alc1, All2))), ADef(is_empty(LIsct(Alc2, All1)))
+    )
 
 
 def Shadows(a1, a2):
@@ -1525,8 +1480,7 @@ def Shadows(a1, a2):
     mod_is_unread = ADef(is_empty(LIsct(Mod1, LUnion(Rd2, Red2))))
     mod_is_shadowed = ADef(is_empty(LDiff(Mod1, Wr2)))
 
-    pred = AAnd(mod_is_unread, mod_is_shadowed)
-    return pred
+    return AAnd(mod_is_unread, mod_is_shadowed)
 
 
 # --------------------------------------------------------------------------- #
@@ -1552,7 +1506,7 @@ class SchedulingError(Exception):
         blob = str(blob).rstrip()
         n = len(name) + 2
         blob = textwrap.indent(blob, " " * n).strip()
-        return f"\n{name}: " + blob
+        return f"\n{name}: {blob}"
 
     @staticmethod
     def _get_scheduling_ops():
@@ -2084,13 +2038,11 @@ def Check_CodeIsDead(proc, stmts):
     slv.pop()
     if not mod_unread_in_proc:
         raise SchedulingError(
-            f"Code is not dead, because values modified might be "
-            f"read later in this proc"
+            'Code is not dead, because values modified might be read later in this proc'
         )
     if not mod_unread_outside:
         raise SchedulingError(
-            f"Code is not dead, because values modified might be "
-            f"read later outside this proc"
+            'Code is not dead, because values modified might be read later outside this proc'
         )
 
 
@@ -2107,7 +2059,7 @@ class _OverApproxEffects(LoopIR_Do):
 
     def __init__(self, proc):
         self._touched = set()
-        self._aliases = dict()
+        self._aliases = {}
         self._globals = set()
 
         super().__init__(proc)
@@ -2174,7 +2126,7 @@ class _OverApproxEffects(LoopIR_Do):
         super().do_s(s)
 
 
-_overapprox_proc_cache = dict()
+_overapprox_proc_cache = {}
 
 
 def overapprox_proc_effs(proc):
@@ -2185,14 +2137,11 @@ def overapprox_proc_effs(proc):
 
 class _Check_Aliasing_Helper(LoopIR_Do):
     def __init__(self, proc):
-        self._aliases = dict()
+        self._aliases = {}
         super().__init__(proc)
 
     def translate(self, name):
-        if name in self._aliases:
-            return self._aliases[name]
-        else:
-            return name
+        return self._aliases[name] if name in self._aliases else name
 
     def do_s(self, s):
         if isinstance(s, LoopIR.Call):
@@ -2222,11 +2171,7 @@ class _Check_Aliasing_Helper(LoopIR_Do):
                         globname = a.config._INTERNAL_sym(a.field)
                         if globname in sub_effs:
                             raise SchedulingError(
-                                f"Passing numeric-type (R, f32, i8, etc.) "
-                                f"configuration variables is not currently "
-                                f"supported in Exo due to internal "
-                                f"complications and potential aliasing "
-                                f"issues."
+                                'Passing numeric-type (R, f32, i8, etc.) configuration variables is not currently supported in Exo due to internal complications and potential aliasing issues.'
                             )
         elif isinstance(s, LoopIR.WindowStmt):
             name = s.rhs.name

@@ -320,8 +320,7 @@ module Effects {
 @extclass(UAST.INT8)
 @extclass(UAST.INT32)
 def shape(t):
-    shp = t.hi if isinstance(t, UAST.Tensor) else []
-    return shp
+    return t.hi if isinstance(t, UAST.Tensor) else []
 
 
 del shape
@@ -557,19 +556,13 @@ class LoopIR_Rewrite:
         return self.map_fnarg(old) or old
 
     def apply_stmts(self, old):
-        if (new := self.map_stmts(old)) is not None:
-            return new
-        return old
+        return new if (new := self.map_stmts(old)) is not None else old
 
     def apply_exprs(self, old):
-        if (new := self.map_exprs(old)) is not None:
-            return new
-        return old
+        return new if (new := self.map_exprs(old)) is not None else old
 
     def apply_s(self, old):
-        if (new := self.map_s(old)) is not None:
-            return new
-        return [old]
+        return new if (new := self.map_s(old)) is not None else [old]
 
     def apply_e(self, old):
         return self.map_e(old) or old
@@ -615,10 +608,7 @@ class LoopIR_Rewrite:
         return None
 
     def map_fnarg(self, a):
-        if t := self.map_t(a.type):
-            return a.update(type=t)
-
-        return None
+        return a.update(type=t) if (t := self.map_t(a.type)) else None
 
     def map_stmts(self, stmts):
         return self._map_list(self.map_s, stmts)
@@ -747,9 +737,8 @@ class LoopIR_Rewrite:
                     lo=new_lo or w.lo,
                     hi=new_hi or w.hi,
                 )
-        else:
-            if new_pt := self.map_e(w.pt):
-                return w.update(pt=new_pt or w.pt)
+        elif new_pt := self.map_e(w.pt):
+            return w.update(pt=new_pt or w.pt)
         return None
 
     def map_t(self, t):
@@ -848,10 +837,7 @@ class LoopIR_Rewrite:
                 else:
                     new_stmts.append(s2)
 
-        if not needs_update:
-            return None
-
-        return new_stmts
+        return None if not needs_update else new_stmts
 
 
 class LoopIR_Do:
@@ -892,9 +878,6 @@ class LoopIR_Do:
                 self.do_e(e)
         elif styp is LoopIR.Alloc:
             self.do_t(s.type)
-        else:
-            pass
-
         self.do_eff(s.eff)
 
     def do_e(self, e):
@@ -913,9 +896,6 @@ class LoopIR_Do:
         elif etyp is LoopIR.WindowExpr:
             for w in e.idx:
                 self.do_w_access(w)
-        else:
-            pass
-
         self.do_t(e.type)
 
     def do_w_access(self, w):
@@ -936,8 +916,6 @@ class LoopIR_Do:
             self.do_t(t.as_tensor)
             for w in t.idx:
                 self.do_w_access(w)
-        else:
-            pass
 
     def do_eff(self, eff):
         if eff is None:
@@ -1020,16 +998,14 @@ class FreeVars(LoopIR_Do):
             etyp is LoopIR.Read
             or etyp is LoopIR.WindowExpr
             or etyp is LoopIR.StrideExpr
-        ):
-            if e.name not in self.env:
-                self.fv.add(e.name)
+        ) and e.name not in self.env:
+            self.fv.add(e.name)
 
         super().do_e(e)
 
     def do_t(self, t):
-        if isinstance(t, T.Window):
-            if t.src_buf not in self.env:
-                self.fv.add(t.src_buf)
+        if isinstance(t, T.Window) and t.src_buf not in self.env:
+            self.fv.add(t.src_buf)
 
         super().do_t(t)
 
@@ -1187,11 +1163,10 @@ class SubstArgs(LoopIR_Rewrite):
         s_new = s2[0] if s2 is not None else s
 
         # this substitution could refer to a read or a window expression
-        if isinstance(s, (LoopIR.Assign, LoopIR.Reduce)):
-            if s.name in self.env:
-                sym = self.env[s.name]
-                assert isinstance(sym, LoopIR.Read) and len(sym.idx) == 0
-                return [s_new.update(name=sym.name)]
+        if isinstance(s, (LoopIR.Assign, LoopIR.Reduce)) and s.name in self.env:
+            sym = self.env[s.name]
+            assert isinstance(sym, LoopIR.Read) and len(sym.idx) == 0
+            return [s_new.update(name=sym.name)]
 
         return s2
 
@@ -1233,12 +1208,11 @@ class SubstArgs(LoopIR_Rewrite):
         return super().map_eff_es(es)
 
     def map_eff_e(self, e):
-        if isinstance(e, Effects.Var):
-            if e.name in self.env:
-                sub_e = self.env[e.name]
-                # Recall a => b  iff  not a or b
-                assert not e.type.is_indexable() or sub_e.type.is_indexable()
-                return lift_to_eff_expr(sub_e)
+        if isinstance(e, Effects.Var) and e.name in self.env:
+            sub_e = self.env[e.name]
+            # Recall a => b  iff  not a or b
+            assert not e.type.is_indexable() or sub_e.type.is_indexable()
+            return lift_to_eff_expr(sub_e)
 
         return super().map_eff_e(e)
 

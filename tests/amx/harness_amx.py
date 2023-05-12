@@ -93,7 +93,7 @@ class AMXTestBuilder:
             f"        for(int k=0; k<{K}; k++) {{",
             f"            for(int r=0; r<{R}; r++) {{",
             f"                {name}[({M}*{K}*{R})*i + ({K}*{R})*j + ({R})*k + r] = {init};",
-            f"}}}}}}}}",
+            "}}}}}}}}",
             "",
         ]
 
@@ -103,7 +103,7 @@ class AMXTestBuilder:
             f"for(int i=0; i<{N}; i++) {{",
             f"    for(int j=0; j<{M}; j++) {{",
             f"        {name}[({M})*i + j] = {init};",
-            f"}}}}",
+            "}}}}",
             "",
         ]
 
@@ -113,7 +113,7 @@ class AMXTestBuilder:
             f"for(int i=0; i<{N}; i++) {{",
             f"    for(int j=0; j<{M}; j++) {{",
             f"        {name}[({M})*i + j] = {init};",
-            f"}}}}",
+            "}}}}",
             "",
         ]
 

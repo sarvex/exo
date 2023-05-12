@@ -38,7 +38,7 @@ def matmul_on_cpu(
             acc_scale(src_tmp, tmp_res1, scale)
             tmp_res2: i8
             clamp(tmp_res1, tmp_res2)
-            if act == True:
+            if act:
                 tmp_res2 = relu(tmp_res2)
             C[i, j] = tmp_res2
 

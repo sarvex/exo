@@ -106,9 +106,8 @@ def sched_op(arg_procs):
     def check_ArgP(argp):
         if is_subclass_obj(argp, ArgumentProcessor):
             return argp()
-        else:
-            assert isinstance(argp, ArgumentProcessor)
-            return argp
+        assert isinstance(argp, ArgumentProcessor)
+        return argp
 
     # note pre-pending of ProcA
     arg_procs = [check_ArgP(argp) for argp in ([ProcA] + arg_procs)]
@@ -218,10 +217,7 @@ class OptionalA(ArgumentProcessor):
         self.arg_proc.setdata(i, arg_name, f_name)
 
     def __call__(self, opt_arg, all_args):
-        if opt_arg is None:
-            return opt_arg
-        else:
-            return self.arg_proc(opt_arg, all_args)
+        return opt_arg if opt_arg is None else self.arg_proc(opt_arg, all_args)
 
 
 class DictA(ArgumentProcessor):
@@ -247,12 +243,10 @@ class ListA(ArgumentProcessor):
         if self.list_only:
             if not isinstance(xs, list):
                 self.err("expected a list")
-        else:
-            if not isinstance(xs, (list, tuple)):
-                self.err("expected a list or tuple")
-        if self.fixed_length:
-            if len(xs) != self.fixed_length:
-                self.err(f"expected a list of length {self.fixed_length}")
+        elif not isinstance(xs, (list, tuple)):
+            self.err("expected a list or tuple")
+        if self.fixed_length and len(xs) != self.fixed_length:
+            self.err(f"expected a list of length {self.fixed_length}")
         # otherwise, check the entries
         xs = [self.elem_arg_proc(x, all_args) for x in xs]
         return xs
@@ -321,13 +315,12 @@ class TypeAbbrevA(ArgumentProcessor):
     def __call__(self, typ, all_args):
         if typ in TypeAbbrevA._shorthand:
             return TypeAbbrevA._shorthand[typ]
-        else:
-            precisions = ", ".join([t for t in TypeAbbrevA._shorthand])
-            self.err(
-                f"expected one of the following strings specifying "
-                f"precision: {precisions}",
-                ValueError,
-            )
+        precisions = ", ".join(list(TypeAbbrevA._shorthand))
+        self.err(
+            f"expected one of the following strings specifying "
+            f"precision: {precisions}",
+            ValueError,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -344,22 +337,20 @@ class ExprCursorA(CursorArgumentProcessor):
             if isinstance(expr_pattern, list):
                 if all(isinstance(ec, PC.ExprCursor) for ec in expr_pattern):
                     return expr_pattern
-                else:
-                    for ec in expr_pattern:
-                        if not isinstance(ec, PC.ExprCursor):
-                            self.err(
-                                f"expected a list of ExprCursor, "
-                                f"not {type(expr_pattern)}"
-                            )
+                for ec in expr_pattern:
+                    if not isinstance(ec, PC.ExprCursor):
+                        self.err(
+                            f"expected a list of ExprCursor, "
+                            f"not {type(expr_pattern)}"
+                        )
             elif not isinstance(expr_pattern, str):
                 self.err("expected an ExprCursor or pattern string")
-        else:
-            if isinstance(expr_pattern, PC.ExprCursor):
-                return expr_pattern
-            elif isinstance(expr_pattern, PC.Cursor):
-                self.err(f"expected an ExprCursor, not {type(expr_pattern)}")
-            elif not isinstance(expr_pattern, str):
-                self.err("expected an ExprCursor or pattern string")
+        elif isinstance(expr_pattern, PC.ExprCursor):
+            return expr_pattern
+        elif isinstance(expr_pattern, PC.Cursor):
+            self.err(f"expected an ExprCursor, not {type(expr_pattern)}")
+        elif not isinstance(expr_pattern, str):
+            self.err("expected an ExprCursor or pattern string")
 
         proc = all_args["proc"]
         # TODO: Remove all need for `call_depth`
@@ -433,13 +424,12 @@ class BlockCursorA(CursorArgumentProcessor):
             cursor = match
 
         # regardless, check block size
-        if self.block_size:
-            if len(cursor) != self.block_size:
-                self.err(
-                    f"expected a block of size {self.block_size}, "
-                    f"but got a block of size {len(cursor)}",
-                    ValueError,
-                )
+        if self.block_size and len(cursor) != self.block_size:
+            self.err(
+                f"expected a block of size {self.block_size}, "
+                f"but got a block of size {len(cursor)}",
+                ValueError,
+            )
 
         return cursor
 
@@ -568,7 +558,6 @@ class NestedForSeqCursorA(StmtCursorA):
         elif isinstance(loops_pattern, str) and (
             match_result := re.search(_name_name_count_re, loops_pattern)
         ):
-            pass
             out_name = match_result[1]
             in_name = match_result[2]
             count = f" #{match_result[3]}" if match_result[3] else ""
@@ -671,10 +660,9 @@ class NewExprA(ArgumentProcessor):
         proc = all_args["proc"]
         ctxt_stmt = self._get_ctxt_stmt(all_args)
 
-        expr = parse_fragment(
+        return parse_fragment(
             proc._loopir_proc, expr_str, ctxt_stmt, expr_holes=expr_holes
         )
-        return expr
 
 
 # This is implemented as a workaround because the
@@ -850,9 +838,10 @@ def commute_expr(proc, expr_cursors):
 
     exprs = [ec._impl for ec in expr_cursors]
     for e in exprs:
-        if not isinstance(e._node, LoopIR.BinOp) or (
-            e._node.op != "+" and e._node.op != "*"
-        ):
+        if not isinstance(e._node, LoopIR.BinOp) or e._node.op not in [
+            "+",
+            "*",
+        ]:
             raise TypeError(f"only '+' or '*' can commute, got {e._node.op}")
     if any(not e._node.type.is_numeric() for e in exprs):
         raise TypeError(

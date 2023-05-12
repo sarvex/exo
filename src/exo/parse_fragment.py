@@ -31,11 +31,10 @@ def parse_fragment(
         return ParseFragment(
             p_ast, proc, ctx_stmt, configs, scope, expr_holes
         ).results()
-    else:
-        assert len(p_ast) == 1
-        return ParseFragment(
-            p_ast[0], proc, ctx_stmt, configs, scope, expr_holes
-        ).results()
+    assert len(p_ast) == 1
+    return ParseFragment(
+        p_ast[0], proc, ctx_stmt, configs, scope, expr_holes
+    ).results()
 
 
 _PAST_to_LoopIR = {
@@ -149,22 +148,20 @@ class BuildEnv_after(LoopIR_Do):
                 self.do_t(s.type)
             else:
                 super().do_s(s)
+        elif styp is LoopIR.Seq:
+            self.do_e(s.hi)
+            self.do_stmts(s.body)
+            if self.in_scope:
+                self.in_scope = False
+        elif styp is LoopIR.If:
+            self.do_e(s.cond)
+            self.do_stmts(s.body)
+            if len(s.orelse) > 0:
+                self.do_stmts(s.orelse)
+            if self.in_scope:
+                self.in_scope = False
         else:
-            # Can introduce scope
-            if styp is LoopIR.Seq:
-                self.do_e(s.hi)
-                self.do_stmts(s.body)
-                if self.in_scope:
-                    self.in_scope = False
-            elif styp is LoopIR.If:
-                self.do_e(s.cond)
-                self.do_stmts(s.body)
-                if len(s.orelse) > 0:
-                    self.do_stmts(s.orelse)
-                if self.in_scope:
-                    self.in_scope = False
-            else:
-                super().do_s(s)
+            super().do_s(s)
 
 
 class ParseFragment:
@@ -210,9 +207,7 @@ class ParseFragment:
         if isinstance(pat, PAST.Read):
             nm = self.find_sym(pat.name)
             if nm is None:
-                raise ParseFragmentError(
-                    f"{pat.name} not found in the " + "current environment"
-                )
+                raise ParseFragmentError(f"{pat.name} not found in the current environment")
             idx = [self.parse_e(i) for i in pat.idx]
             return LoopIR.Read(nm, idx, self.env[nm], self.srcinfo)
         elif isinstance(pat, PAST.BinOp):
@@ -257,7 +252,7 @@ class ParseFragment:
             typ = cfg.lookup(pat.field)[1]
             return LoopIR.ReadConfig(cfg, pat.field, typ, self.srcinfo)
         elif isinstance(pat, PAST.E_Hole):
-            if self.expr_holes == None:
+            if self.expr_holes is None:
                 raise ParseFragmentError("String cannot contain holes")
             if len(self.expr_holes) == 0:
                 raise ParseFragmentError(
@@ -357,7 +352,7 @@ class ParseFragment:
         return self._results
 
     def type_for_binop(self, op, lhs, rhs):
-        if (lhs.type is T.size and rhs.type is T.size) and (op == "+" or op == "*"):
+        if (lhs.type is T.size and rhs.type is T.size) and op in ["+", "*"]:
             return T.size
 
         return {

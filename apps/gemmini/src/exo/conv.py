@@ -49,7 +49,7 @@ def conv_on_cpu_stride_1(
                     acc_scale(src_tmp, tmp_res1, scale)
                     tmp_res2: i8
                     clamp(tmp_res1, tmp_res2)
-                    if act == True:
+                    if act:
                         tmp_res2 = relu(tmp_res2)
 
                     output[b, orow, ocol, och] = tmp_res2

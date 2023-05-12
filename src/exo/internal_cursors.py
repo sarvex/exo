@@ -258,12 +258,11 @@ class Block(Cursor):
 
     def __getitem__(self, i):
         r = self._range[i]
-        if isinstance(r, range):
-            if r.step != 1:
-                raise IndexError("block cursors must be contiguous")
-            return Block(self._root, self._anchor, self._attr, r)
-        else:
+        if not isinstance(r, range):
             return self._anchor._child_node(self._attr, r)
+        if r.step != 1:
+            raise IndexError("block cursors must be contiguous")
+        return Block(self._root, self._anchor, self._attr, r)
 
     def __len__(self):
         return len(self._range)
@@ -507,10 +506,6 @@ class Block(Cursor):
                             + cur_path[block_n + 1 :]
                         ),
                     )
-                else:
-                    # before orig block, do nothing
-                    pass
-
             # if after orig. gap, add edit_n
             if (
                 cur_n > gap_n
@@ -717,9 +712,7 @@ class Gap(Cursor):
     # ------------------------------------------------------------------------ #
 
     def parent(self) -> Node:
-        if self.is_edge():
-            return self._anchor
-        return self._anchor.parent()
+        return self._anchor if self.is_edge() else self._anchor.parent()
 
     def anchor(self) -> Node:
         return self._anchor

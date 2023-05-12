@@ -6,15 +6,15 @@ from exo.platforms.gemmini import *
 def matmul_algorithm():
     @proc
     def matmul(
-        N: size,
-        M: size,
-        K: size,
-        scale: f32,
-        act: bool,
-        A: i8[N, K] @ DRAM,
-        B: i8[K, M] @ DRAM,
-        C: i8[N, M] @ DRAM,
-    ):
+            N: size,
+            M: size,
+            K: size,
+            scale: f32,
+            act: bool,
+            A: i8[N, K] @ DRAM,
+            B: i8[K, M] @ DRAM,
+            C: i8[N, M] @ DRAM,
+        ):
 
         # Algorithm starts here
         for i in seq(0, N):
@@ -40,10 +40,11 @@ def matmul_algorithm():
                 acc_scale(src_tmp, tmp_res1, scale)
                 tmp_res2: i8
                 clamp(tmp_res1, tmp_res2)
-                if act == True:
+                if act:
                     tmp_res2 = relu(tmp_res2)
                 C[i, j] = tmp_res2
-        # Algorithm ends here. 23 lines excluding newlines
+            # Algorithm ends here. 23 lines excluding newlines
+
 
     return matmul
 

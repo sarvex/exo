@@ -353,15 +353,11 @@ def test_bool1(compiler):
 
     @proc
     def bool1(a: bool, b: bool):
-        assert b == True
+        assert b
 
         foo(False)
         x: f32
-        if b == True:
-            x = 0.0
-        else:
-            x = 1.0
-
+        x = 0.0 if b else 1.0
         if a == b:
             x = 0.0
 

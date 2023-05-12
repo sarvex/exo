@@ -307,13 +307,13 @@ def test_scal():
         assert stride(x, 0) == 1
         reg0: f32[8] @ AVX2
         if n / 8 > 0:
-            mm256_broadcast_ss_scalar(reg0[0:8], alpha)
+            mm256_broadcast_ss_scalar(reg0[:8], alpha)
         reg1: f32[8] @ AVX2
         reg2: f32[8] @ AVX2
         for io in seq(0, n / 8):
-            mm256_loadu_ps(reg1[0:8], x[8 * io + 0 : 8 * io + 8])
-            mm256_mul_ps(reg2[0:8], reg0[0:8], reg1[0:8])
-            mm256_storeu_ps(x[8 * io + 0 : 8 * io + 8], reg2[0:8])
+            mm256_loadu_ps(reg1[:8], x[8 * io + 0 : 8 * io + 8])
+            mm256_mul_ps(reg2[:8], reg0[:8], reg1[:8])
+            mm256_storeu_ps(x[8 * io + 0 : 8 * io + 8], reg2[:8])
         for ii in seq(0, n % 8):
             x[ii + n / 8 * 8] = alpha * x[ii + n / 8 * 8]
 

@@ -58,10 +58,7 @@ del __str__
 
 @extclass(QAST.Read)
 def __str__(self):
-    if len(self.idx) > 0:
-        return f"{self.name}[_]"
-    else:
-        return f"{self.name}"
+    return f"{self.name}[_]" if len(self.idx) > 0 else f"{self.name}"
 
 
 del __str__
@@ -102,7 +99,7 @@ class LoopIR_to_QAST:
     def __init__(self, loopir_node):
         self.loopir_node = loopir_node
 
-        self.names = dict()
+        self.names = {}
 
         if isinstance(loopir_node, LoopIR.proc):
             self.qast = self.map_proc(loopir_node)

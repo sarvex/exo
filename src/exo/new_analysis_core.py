@@ -154,7 +154,7 @@ def ANot(x):
 
 
 def AAnd(*args):
-    if len(args) == 0:
+    if not args:
         return A.Const(True, T.bool, null_srcinfo())
     res = args[0]
     for a in args[1:]:
@@ -163,7 +163,7 @@ def AAnd(*args):
 
 
 def AOr(*args):
-    if len(args) == 0:
+    if not args:
         return A.Const(False, T.bool, null_srcinfo())
     res = args[0]
     for a in args[1:]:
@@ -308,9 +308,9 @@ def _estr(e, prec=0, tab=""):
     elif isinstance(e, A.Stride):
         return f"stride({e.name},{e.dim})"
     elif isinstance(e, A.LetStrides):
-        strides = ",".join([_estr(s, tab=tab + "  ") for s in e.strides])
+        strides = ",".join([_estr(s, tab=f"{tab}  ") for s in e.strides])
         bind = f"{e.name} = ({strides})"
-        body = _estr(e.body, tab=tab + "  ")
+        body = _estr(e.body, tab=f"{tab}  ")
         s = f"letStride {bind}\n{tab}in {body}"
         return f"({s}\n{tab})" if prec > 0 else s
     elif isinstance(e, A.Select):
@@ -347,9 +347,12 @@ def _estr(e, prec=0, tab=""):
                 tab=tab,
             )
         binds = "\n".join(
-            [f"{tab}{x} = {_estr(rhs,tab=tab+'  ')}" for x, rhs in zip(e.names, e.rhs)]
+            [
+                f"{tab}{x} = {_estr(rhs, tab=f'{tab}  ')}"
+                for x, rhs in zip(e.names, e.rhs)
+            ]
         )
-        body = _estr(e.body, tab=tab + "  ")
+        body = _estr(e.body, tab=f"{tab}  ")
         s = f"let\n{binds}\n{tab}in {body}"
         return f"({s}\n{tab})" if prec > 0 else s
     elif isinstance(e, A.Tuple):
@@ -357,8 +360,8 @@ def _estr(e, prec=0, tab=""):
         return f"({args})"
     elif isinstance(e, A.LetTuple):
         names = ",".join([str(n) for n in e.names])
-        bind = f"{names} = {_estr(e.rhs,tab=tab+'  ')}"
-        body = _estr(e.body, tab=tab + "  ")
+        bind = f"{names} = {_estr(e.rhs, tab=f'{tab}  ')}"
+        body = _estr(e.body, tab=f"{tab}  ")
         s = f"let_tuple {bind}\n{tab}in {body}"
         return f"({s}\n{tab})" if prec > 0 else s
     else:
@@ -390,12 +393,9 @@ def aeFV(e, env=None):
         env = env.parents
 
     if isinstance(e, A.Var):
-        if e.name not in env:
-            return {e.name: e.type}
-        else:
-            return dict()
+        return {e.name: e.type} if e.name not in env else {}
     elif isinstance(e, (A.Unk, A.Const)):
-        return dict()
+        return {}
     elif isinstance(e, (A.Not, A.USub, A.Definitely, A.Maybe)):
         return aeFV(e.arg, env)
     elif isinstance(e, A.BinOp):
@@ -405,13 +405,10 @@ def aeFV(e, env=None):
     elif isinstance(e, A.Stride):
         # stride symbol gets encoded as a tuple
         key = (e.name, e.dim)
-        if key not in env:
-            return {key: T.stride}
-        else:
-            return dict()
+        return {key: T.stride} if key not in env else {}
     elif isinstance(e, A.LetStrides):
         push()
-        res = dict()
+        res = {}
         for s in e.strides:
             res = res | aeFV(s, env)
         for i, _ in enumerate(e.strides):
@@ -429,7 +426,7 @@ def aeFV(e, env=None):
         return res
     elif isinstance(e, A.Let):
         push()
-        res = dict()
+        res = {}
         for r in e.rhs:
             res = res | aeFV(r, env)
         for nm in e.names:
@@ -438,13 +435,13 @@ def aeFV(e, env=None):
         pop()
         return res
     elif isinstance(e, A.Tuple):
-        res = dict()
+        res = {}
         for a in e.args:
             res = res | aeFV(a, env)
         return res
     elif isinstance(e, A.LetTuple):
         push()
-        res = dict()
+        res = {}
         res = aeFV(e.rhs, env)
         for nm in e.names:
             env[nm] = True
@@ -456,8 +453,8 @@ def aeFV(e, env=None):
 
 
 def aeNegPos(e, pos, env=None, res=None):
-    res = res or dict()
-    env = env or dict()  # ChainMap()
+    res = res or {}
+    env = env or {}
 
     def save_and_shadow(names):
         nonlocal env
@@ -540,7 +537,7 @@ def aeNegPos(e, pos, env=None, res=None):
         aeNegPos(e.body, pos, env, res)
         # merge negation position of the tuple variables
         nm_pos = [env[nm] for nm in e.names if nm in env]
-        if len(nm_pos) > 0:
+        if nm_pos:
             pos = nm_pos[0]
             for p in nm_pos[1:]:
                 if p != pos:
@@ -580,8 +577,7 @@ class DebugSolverFrame:
                 lines.append(f"bind    {nms} = {rhs}")
                 assert type(smt) is tuple
                 if show_smt:
-                    for s in smt:
-                        lines.append(f"    smt {SMT.to_smtlib(s)}")
+                    lines.extend(f"    smt {SMT.to_smtlib(s)}" for s in smt)
             elif c[0] == "assume":
                 cmd, e, smt = c
                 lines.append(f"assume  {e}")
@@ -618,7 +614,7 @@ class SMTSolver:
     def __init__(self, verbose=False):
         self.env = ChainMap()
         self.stride_sym = ChainMap()
-        self.const_sym = dict()
+        self.const_sym = {}
         self.const_sym_count = 1
         self.solver = _get_smt_solver()
         self.verbose = verbose
@@ -701,13 +697,9 @@ class SMTSolver:
             elif type(x) is ConstSymFV:
                 x = self._get_const_sym(x.name)
                 # print("CONST SYM", x)
-            if x in self.env:
-                pass  # already defined; no worries
-            else:
+            if x not in self.env:
                 v = self._getvar(x, typ)  # force adding to environment
-                if self.Z3_MODE:
-                    pass
-                else:
+                if not self.Z3_MODE:
                     self.z3.add_var(v.symbol_name(), typ)
 
     def assume(self, e):
@@ -763,9 +755,7 @@ class SMTSolver:
             print(e)
             print(smt_e)
             print("smtlib2")
-            if self.Z3_MODE:
-                pass  # print(Z3.to_smt2(smt_e))
-            else:
+            if not self.Z3_MODE:
                 print(SMT.to_smtlib(smt_e))
         if self.Z3_MODE:
             self.z3slv.assert_exprs(Z3.Not(smt_e))
@@ -788,36 +778,11 @@ class SMTSolver:
     def counter_example(self):
         raise NotImplementedError("Out of Date")
 
-        def keep_sym(s):
-            if type(s) is tuple:
-                return True
-            else:
-                return s.get_type() == SMT.INT or s.get_type() == SMT.BOOL
-
-        env_syms = [(sym, smt) for sym, smt in self.env.items() if keep_sym(smt)]
-        smt_syms = []
-        for _, smt in env_syms:
-            if is_ternary(smt):
-                smt_syms += [smt.v, smt.d]
-            else:
-                smt_syms.append(smt)
-        val_map = self.solver.get_py_values(smt_syms)
-
-        mapping = dict()
-        for sym, smt in env_syms:
-            if is_ternary(smt):
-                x, d = val_map[smt.v], val_map[smt.d]
-                mapping[sym] = "unknown" if not d else x
-            else:
-                mapping[sym] = val_map[smt]
-        return mapping
-
     def _get_stride_sym(self, name, dim):
         key = (name, dim)
         if key not in self.stride_sym:
             self.stride_sym[key] = Sym(f"{name}_stride_{dim}")
-        sym = self.stride_sym[key]
-        return sym
+        return self.stride_sym[key]
 
     def _get_const_sym(self, name):
         if name not in self.const_sym:
@@ -847,15 +812,14 @@ class SMTSolver:
                     self.env[sym] = Z3.Int(repr(sym))
                 else:
                     assert False, f"bad type: {typ}"
+            elif typ.is_indexable() or typ.is_stridable():
+                self.env[sym] = SMT.Symbol(repr(sym), SMT.INT)
+            elif typ is T.bool:
+                self.env[sym] = SMT.Symbol(repr(sym), SMT.BOOL)
+            elif typ.is_real_scalar():
+                self.env[sym] = SMT.Symbol(repr(sym), SMT.INT)
             else:
-                if typ.is_indexable() or typ.is_stridable():
-                    self.env[sym] = SMT.Symbol(repr(sym), SMT.INT)
-                elif typ is T.bool:
-                    self.env[sym] = SMT.Symbol(repr(sym), SMT.BOOL)
-                elif typ.is_real_scalar():
-                    self.env[sym] = SMT.Symbol(repr(sym), SMT.INT)
-                else:
-                    assert False, f"bad type: {typ}"
+                assert False, f"bad type: {typ}"
         return self.env[sym]
 
     def _newvar(self, sym, typ=T.index, ternary=False):
@@ -865,20 +829,17 @@ class SMTSolver:
             smt_typ = Z3.Bool if typ == T.bool else Z3.Int
 
             smt_sym = smt_typ(nm)
-            if ternary:
-                self.env[sym] = TernVal(smt_sym, Z3.Bool(nm + "_def"))
-            else:
-                self.env[sym] = smt_sym
-            return self.env[sym]
+            self.env[sym] = TernVal(smt_sym, Z3.Bool(f"{nm}_def")) if ternary else smt_sym
         else:
             smt_typ = SMT.BOOL if typ == T.bool else SMT.INT
 
             smt_sym = SMT.Symbol(nm, smt_typ)
             if ternary:
-                self.env[sym] = TernVal(smt_sym, SMT.Symbol(nm + "_def", SMT.BOOL))
+                self.env[sym] = TernVal(smt_sym, SMT.Symbol(f"{nm}_def", SMT.BOOL))
             else:
                 self.env[sym] = smt_sym
-            return self.env[sym]
+
+        return self.env[sym]
 
     def _add_mod_div_eq(self, new_sym, eq):
         self.mod_div_tmp_bins[-1].append((new_sym, eq))

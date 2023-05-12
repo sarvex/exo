@@ -71,10 +71,10 @@ class ASimplify:
     def __init__(self, top_level_a):
         self._init_a = top_level_a
 
-        self._const_prop_cache = dict()
+        self._const_prop_cache = {}
         self._const_vals = ChainMap()
 
-        self._fv_cache = dict()
+        self._fv_cache = {}
 
         a = top_level_a
         # constant propagation
@@ -139,7 +139,7 @@ class ASimplify:
             if isinstance(arg, A.Const):
                 return arg
             elif isinstance(arg, A.Unk):
-                return ABool(False if isinstance(a, A.Definitely) else True)
+                return ABool(not isinstance(a, A.Definitely))
             else:
                 return type(a)(arg, a.type, a.srcinfo)
 
@@ -188,45 +188,40 @@ class ASimplify:
                 else:
                     assert False, f"bad case: {a.op}"
 
-            else:
-                if lconst and rconst:
-                    assert a.type.is_indexable()
-                    if a.op == "/":
-                        pass
-                    else:
-                        return AInt(
-                            (lhs.val + rhs.val)
-                            if a.op == "+"
-                            else (lhs.val - rhs.val)
-                            if a.op == "-"
-                            else (lhs.val * rhs.val)
-                            if a.op == "*"
-                            else (lhs.val % rhs.val)
-                        )
-                elif lconst:
-                    if a.op == "+" and lhs.val == 0:
-                        return rhs
-                    elif a.op == "-" and lhs.val == 0:
-                        return -rhs
-                    elif a.op in ("*", "/", "%") and lhs.val == 0:
-                        return lhs
-                    elif a.op == "*" and lhs.val == 1:
-                        return rhs
-                    elif a.op == "%" and lhs.val == 1:
-                        return lhs
-                    # fall through
-                elif rconst:
-                    if a.op in ("+", "-") and rhs.val == 0:
-                        return lhs
-                    elif a.op == "*" and rhs.val == 0:
-                        return rhs
-                    elif a.op in ("*", "/") and rhs.val == 1:
-                        return lhs
-                    # fall through
-                elif lunk or runk:
-                    return A.Unk(a.type, a.srcinfo)
+            elif lconst and rconst:
+                assert a.type.is_indexable()
+                if a.op != "/":
+                    return AInt(
+                        (lhs.val + rhs.val)
+                        if a.op == "+"
+                        else (lhs.val - rhs.val)
+                        if a.op == "-"
+                        else (lhs.val * rhs.val)
+                        if a.op == "*"
+                        else (lhs.val % rhs.val)
+                    )
+            elif lconst:
+                if a.op == "+" and lhs.val == 0:
+                    return rhs
+                elif a.op == "-" and lhs.val == 0:
+                    return -rhs
+                elif a.op in ("*", "/", "%") and lhs.val == 0:
+                    return lhs
+                elif a.op == "*" and lhs.val == 1:
+                    return rhs
+                elif a.op == "%" and lhs.val == 1:
+                    return lhs
                 # fall through
-
+            elif rconst:
+                if a.op in ("+", "-") and rhs.val == 0:
+                    return lhs
+                elif a.op == "*" and rhs.val == 0:
+                    return rhs
+                elif a.op in ("*", "/") and rhs.val == 1:
+                    return lhs
+                # fall through
+            elif lunk or runk:
+                return A.Unk(a.type, a.srcinfo)
             # finally check for a number of other equality tests
             # that we can collapse out
             if a.op == "==" and type(a.lhs) == type(a.rhs):
@@ -313,12 +308,9 @@ class ASimplify:
                     self._const_vals[nm] = None
             body = self.cprop(a.body)
             self.pop_cprop()
-            if len(name_list) == 0:
-                return body
-            else:
+            if name_list:
                 body = A.Let(name_list, rhs_list, body, a.type, a.srcinfo)
-                return body
-
+            return body
         else:
             assert False, f"Bad Case: {type(a)}"
 
@@ -342,9 +334,8 @@ class ASimplify:
             bodyFV = self._FV(body)
             if all(nm not in bodyFV for nm in names):
                 return body
-            else:
-                strides = [self.dcode(s) for s in a.strides]
-                return A.LetStrides(a.name, strides, body, a.type, a.srcinfo)
+            strides = [self.dcode(s) for s in a.strides]
+            return A.LetStrides(a.name, strides, body, a.type, a.srcinfo)
         elif isinstance(a, A.Select):
             cond = self.dcode(a.cond)
             tcase = self.dcode(a.tcase)
@@ -361,24 +352,21 @@ class ASimplify:
             bodyFV = self._FV(body)
             if all(nm not in bodyFV for nm in a.names):
                 return body
-            else:
-                rhs = self.dcode(a.rhs)
-                return A.LetTuple(a.names, rhs, body, a.type, a.srcinfo)
+            rhs = self.dcode(a.rhs)
+            return A.LetTuple(a.names, rhs, body, a.type, a.srcinfo)
         elif isinstance(a, A.Let):
             body = self.dcode(a.body)
             FV = self._FV(body)
             name_list = []
             rhs_list = []
             for nm, rhs in reversed(list(zip(a.names, a.rhs))):
-                if nm not in FV:
-                    pass
-                else:
+                if nm in FV:
                     rhs = self.dcode(rhs)
                     FV = (FV - {nm}) | self._FV(rhs)
                     name_list.append(nm)
                     rhs_list.append(rhs)
 
-            if len(name_list) == 0:
+            if not name_list:
                 return body
             else:
                 return A.Let(name_list, rhs_list, body, a.type, a.srcinfo)

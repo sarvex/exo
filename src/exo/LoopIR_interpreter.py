@@ -29,7 +29,7 @@ class Interpreter:
         self.use_randomization = use_randomization
 
         for a in proc.args:
-            if not str(a.name) in kwargs:
+            if str(a.name) not in kwargs:
                 raise TypeError(f"expected argument '{a.name}' to be supplied")
 
             if a.type is T.size:
@@ -37,22 +37,18 @@ class Interpreter:
                     raise TypeError(
                         f"expected size '{a.name}' to have positive integer value"
                     )
-                self.env[a.name] = kwargs[str(a.name)]
             elif a.type is T.index:
                 if type(kwargs[str(a.name)]) is not T.index:
                     raise TypeError(
                         f"expected index variable '{a.name}' to be an integer"
                     )
-                self.env[a.name] = kwargs[str(a.name)]
             elif a.type is T.bool:
                 if type(kwargs[str(a.name)]) is not bool:
                     raise TypeError(f"expected bool variable '{a.name}' to be a bool")
-                self.env[a.name] = kwargs[str(a.name)]
             else:
                 assert a.type.is_numeric()
                 self.simple_typecheck_buffer(a, kwargs)
-                self.env[a.name] = kwargs[str(a.name)]
-
+            self.env[a.name] = kwargs[str(a.name)]
         self.env.new_child()
         self.eval_stmts(proc.body)
         self.env.parents
@@ -66,7 +62,7 @@ class Interpreter:
         pre = f"bad argument '{nm}'"
         if not isinstance(buf, np.ndarray):
             raise TypeError(f"{pre}: expected numpy.ndarray")
-        elif buf.dtype != float and buf.dtype != np.float32:
+        elif buf.dtype not in [float, np.float32]:
             raise TypeError(
                 f"{pre}: expected buffer of floating-point values; "
                 f"had '{buf.dtype}' values"
@@ -100,10 +96,7 @@ class Interpreter:
         elif styp is LoopIR.Assign or styp is LoopIR.Reduce:
             # lbuf[a0,a1,...] = rhs
             lbuf = self.env[s.name]
-            if len(s.idx) == 0:
-                idx = (0,)
-            else:
-                idx = tuple(self.eval_e(a) for a in s.idx)
+            idx = (0, ) if len(s.idx) == 0 else tuple(self.eval_e(a) for a in s.idx)
             rhs = self.eval_e(s.rhs)
             if styp is LoopIR.Assign:
                 lbuf[idx] = rhs
@@ -137,7 +130,7 @@ class Interpreter:
         elif styp is LoopIR.Call:
             argvals = [self.eval_e(a, call_arg=True) for a in s.args]
             argnames = [str(a.name) for a in s.f.args]
-            kwargs = {nm: val for nm, val in zip(argnames, argvals)}
+            kwargs = dict(zip(argnames, argvals))
             Interpreter(s.f, kwargs, use_randomization=self.use_randomization)
         else:
             assert False, "bad case"
@@ -149,36 +142,32 @@ class Interpreter:
             buf = self.env[e.name]
             if call_arg or isinstance(buf, (int, bool)):
                 return buf
-            else:
-                idx = (0,) if len(e.idx) == 0 else tuple(self.eval_e(a) for a in e.idx)
-                return buf[idx]
+            idx = (0,) if len(e.idx) == 0 else tuple(self.eval_e(a) for a in e.idx)
+            return buf[idx]
         elif etyp is LoopIR.Const:
             return e.val
         elif etyp is LoopIR.USub:
             return -self.eval_e(e.arg)
         elif etyp is LoopIR.BinOp:
             lhs, rhs = self.eval_e(e.lhs), self.eval_e(e.rhs)
-            if e.op == "+":
+            if e.op == "%":
+                return lhs % rhs
+            elif e.op == "*":
+                return lhs * rhs
+            elif e.op == "+":
                 return lhs + rhs
             elif e.op == "-":
                 return lhs - rhs
-            elif e.op == "*":
-                return lhs * rhs
-            elif e.op == "/":  # is this right?
-                if isinstance(lhs, int):
-                    return (lhs + rhs - 1) // rhs
-                else:
-                    return lhs / rhs
-            elif e.op == "%":
-                return lhs % rhs
-            elif e.op == "==":
-                return lhs == rhs
+            elif e.op == "/":
+                return (lhs + rhs - 1) // rhs if isinstance(lhs, int) else lhs / rhs
             elif e.op == "<":
                 return lhs < rhs
-            elif e.op == ">":
-                return lhs > rhs
             elif e.op == "<=":
                 return lhs <= rhs
+            elif e.op == "==":
+                return lhs == rhs
+            elif e.op == ">":
+                return lhs > rhs
             elif e.op == ">=":
                 return lhs >= rhs
             elif e.op == "and":

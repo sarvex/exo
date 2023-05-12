@@ -23,7 +23,6 @@ def test_new_stride1(golden):
     @proc
     def foo(s: stride, scale: f32):
         assert s == 1
-        pass
 
     @proc
     def bar(n: size, A: i8[n]):
@@ -136,9 +135,7 @@ def test_good_bound1(golden):
     @proc
     def good_bound1(n: size, dst: R[n] @ DRAM, src: R[n] @ DRAM):
         for i in seq(0, (n + 7) / 8):
-            if n - 8 * i >= 8:
-                pass
-            else:
+            if n - 8 * i < 8:
                 for j in seq(0, n - 8 * i):
                     dst[8 * i + j] = src[8 * i + j]
 
@@ -180,9 +177,7 @@ def test_bad_bound4():
         @proc
         def bar(n: size, dst: R[n] @ DRAM, src: R[n] @ DRAM):
             for i in seq(0, (n + 7) / 8):
-                if n - 8 * i >= 8:
-                    pass
-                else:
+                if n - 8 * i < 8:
                     for j in seq(0, n - 9 * i):
                         dst[8 * i + j] = src[8 * i + j]
 
@@ -243,7 +238,6 @@ def test_assert1():
         @proc
         def foo(n: size, x: i8[n, n]):
             assert n == 1
-            pass
 
         @proc
         def bar():
@@ -307,7 +301,6 @@ def test_div1(golden):
     @proc
     def foo(n: size):
         assert n == 3
-        pass
 
     @proc
     def bar():
@@ -320,7 +313,6 @@ def test_mod1(golden):
     @proc
     def foo(n: size):
         assert n == 1
-        pass
 
     @proc
     def bar():
@@ -333,15 +325,14 @@ def test_mod1(golden):
 def test_stride_assert1(golden):
     @proc
     def foo(
-        n: size,
-        m: size,
-        src: [i8][n, m] @ DRAM,
-        dst: [i8][n, 16] @ GEMM_SCRATCH,
-    ):
+            n: size,
+            m: size,
+            src: [i8][n, m] @ DRAM,
+            dst: [i8][n, 16] @ GEMM_SCRATCH,
+        ):
         assert stride(src, 1) == 1
         assert stride(dst, 0) == 16
         assert stride(dst, 1) == 1
-        pass
 
     @proc
     def bar(x: i8[30, 10] @ DRAM, y: i8[30, 16] @ GEMM_SCRATCH):
@@ -356,15 +347,14 @@ def test_stride_assert2():
 
         @proc
         def foo(
-            n: size,
-            m: size,
-            src: [i8][n, m] @ DRAM,
-            dst: [i8][n, 16] @ GEMM_SCRATCH,
-        ):
+                    n: size,
+                    m: size,
+                    src: [i8][n, m] @ DRAM,
+                    dst: [i8][n, 16] @ GEMM_SCRATCH,
+                ):
             assert stride(src, 1) == 1
             assert stride(dst, 0) == 16
             assert stride(dst, 1) == 1
-            pass
 
         @proc
         def bar(x: i8[30, 10] @ DRAM, y: [i8][30, 16] @ GEMM_SCRATCH):
@@ -375,15 +365,14 @@ def test_stride_assert2():
 def test_stride_assert3(golden):
     @proc
     def foo(
-        n: size,
-        m: size,
-        src: [i8][n, m] @ DRAM,
-        dst: [i8][n, 16] @ GEMM_SCRATCH,
-    ):
+            n: size,
+            m: size,
+            src: [i8][n, m] @ DRAM,
+            dst: [i8][n, 16] @ GEMM_SCRATCH,
+        ):
         assert stride(src, 1) == 1
         assert stride(dst, 0) == 16
         assert stride(dst, 1) == 1
-        pass
 
     @proc
     def bar(x: i8[30, 10] @ DRAM, y: [i8][30, 16] @ GEMM_SCRATCH):
@@ -401,15 +390,14 @@ def test_stride_assert4():
 
         @proc
         def foo(
-            n: size,
-            m: size,
-            src: i8[n, m] @ DRAM,
-            dst: i8[n, 16] @ GEMM_SCRATCH,
-        ):
+                    n: size,
+                    m: size,
+                    src: i8[n, m] @ DRAM,
+                    dst: i8[n, 16] @ GEMM_SCRATCH,
+                ):
             assert stride(src, 1) == 1
             assert stride(dst, 0) == 16
             assert stride(dst, 1) == 1
-            pass
 
         @proc
         def bar(x: [i8][30, 10] @ DRAM, y: [i8][30, 16] @ GEMM_SCRATCH):
@@ -423,7 +411,6 @@ def test_stride_assert5():
         @proc
         def bar(x: i8[30, 10] @ DRAM, y: i8[30, 16] @ GEMM_SCRATCH):
             assert stride(x, 0) == 9
-            pass
 
 
 # Tensor asserting last dimension is fine
@@ -431,7 +418,6 @@ def test_stride_assert6(golden):
     @proc
     def bar(n: size, m: size, x: i8[n, m] @ DRAM):
         assert stride(x, 1) == 1
-        pass
 
     assert bar.show_effects() == golden
 
@@ -444,7 +430,6 @@ def test_stride_assert7(golden):
     @proc
     def bar(n: size, m: size, x: i8[n, m] @ DRAM):
         assert stride(x, 0) == 10
-        pass
 
     assert bar.show_effects() == golden
 
@@ -453,15 +438,14 @@ def test_stride_assert7(golden):
 def test_stride_assert8(golden):
     @proc
     def foo(
-        n: size,
-        m: size,
-        src: [i8][n, m] @ DRAM,
-        dst: [i8][n, 16] @ GEMM_SCRATCH,
-    ):
+            n: size,
+            m: size,
+            src: [i8][n, m] @ DRAM,
+            dst: [i8][n, 16] @ GEMM_SCRATCH,
+        ):
         assert stride(src, 1) == 1
         assert stride(dst, 0) == 16
         assert stride(dst, 1) == 1
-        pass
 
     @proc
     def bar(x: i8[8, 30, 10] @ DRAM, y: i8[50, 4, 100, 16] @ GEMM_SCRATCH):
@@ -477,15 +461,14 @@ def test_stride_assert8(golden):
 def test_stride_assert9(golden):
     @proc
     def foo(
-        n: size,
-        m: size,
-        src: [i8][n, m] @ DRAM,
-        dst: [i8][n, 16] @ GEMM_SCRATCH,
-    ):
+            n: size,
+            m: size,
+            src: [i8][n, m] @ DRAM,
+            dst: [i8][n, 16] @ GEMM_SCRATCH,
+        ):
         assert stride(src, 1) == 1
         assert stride(dst, 0) == 16
         assert stride(dst, 1) == 1
-        pass
 
     @proc
     def bar(x: i8[8, 30, 10] @ DRAM, y: i8[50, 4, 100, 16] @ GEMM_SCRATCH):
@@ -498,15 +481,14 @@ def test_stride_assert9(golden):
 def test_stride_assert10(golden):
     @proc
     def foo(
-        n: size,
-        m: size,
-        src: [i8][n, m] @ DRAM,
-        dst: [i8][n, 16] @ GEMM_SCRATCH,
-    ):
+            n: size,
+            m: size,
+            src: [i8][n, m] @ DRAM,
+            dst: [i8][n, 16] @ GEMM_SCRATCH,
+        ):
         assert stride(src, 1) == 1
         assert stride(dst, 0) == 16
         assert stride(dst, 1) == 1
-        pass
 
     @proc
     def bar():
@@ -522,17 +504,16 @@ def test_stride_assert10(golden):
 def test_stride_assert11(golden):
     @proc
     def foo(
-        n: size,
-        m: size,
-        s: stride,
-        src: [i8][n, m] @ DRAM,
-        dst: [i8][n, 16] @ GEMM_SCRATCH,
-    ):
+            n: size,
+            m: size,
+            s: stride,
+            src: [i8][n, m] @ DRAM,
+            dst: [i8][n, 16] @ GEMM_SCRATCH,
+        ):
         assert stride(src, 0) == s
         assert stride(src, 1) == 1
         assert stride(dst, 0) == 16
         assert stride(dst, 1) == 1
-        pass
 
     @proc
     def bar():

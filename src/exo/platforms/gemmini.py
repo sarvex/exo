@@ -245,9 +245,7 @@ class QAST_Do:
             [self.do_w_access(w) for w in e.idx]
         elif type(e) is QAST.StrideExpr:
             pass
-        elif type(e) is QAST.ReadConfig:
-            pass
-        else:
+        elif type(e) is not QAST.ReadConfig:
             assert False, "bad case"
 
 
@@ -653,8 +651,8 @@ def ld_i8_s2(
     src: [i8][n * 2 - 1, m] @ DRAM,
     dst: [i8][n, 16] @ GEMM_SCRATCH,
 ):
-    assert 0 < n and n <= 16
-    assert 0 < m and m <= 16
+    assert 0 < n <= 16
+    assert 0 < m <= 16
     assert stride(src, 1) == 1
     assert stride(dst, 0) == 16
     assert stride(dst, 1) == 1
@@ -935,7 +933,7 @@ def st_acc_i8(
             acc_scale(src_tmp, tmp, scale)
             tmp2: i8
             clamp(tmp, tmp2)
-            if act == True:
+            if act:
                 tmp2 = relu(tmp2)
             dst[i, j] = tmp2
 
@@ -1114,8 +1112,6 @@ def zero_i8(
     assert stride(dst, 0) == 16
     assert stride(dst, 1) == 1
 
-    pass
-
     for i in seq(0, n):
         for j in seq(0, m):
             dst[i, j] = 0.0
@@ -1176,8 +1172,6 @@ def zero_i8_vector(
     dst: [i8][16] @ GEMM_SCRATCH,
 ):
     assert stride(dst, 0) == 16
-    pass
-
     for i in seq(0, 16):
         dst[i] = 0.0
 
@@ -1257,7 +1251,6 @@ def matmul_i8(
     assert M <= 16
     assert K <= 16
 
-    pass
     for i in seq(0, N):
         for j in seq(0, M):
             C[i, j] = 0.0
@@ -1341,7 +1334,6 @@ def matmul_acc_i8(
     assert M <= 16
     assert K <= 16
 
-    pass
     for i in seq(0, N):
         for j in seq(0, M):
             for k in seq(0, K):

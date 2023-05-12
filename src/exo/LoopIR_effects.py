@@ -53,10 +53,7 @@ def _exprstr(e, prec=0):
         local_prec = op_prec[e.op]
         lhs = _exprstr(e.lhs, prec=local_prec)
         rhs = _exprstr(e.rhs, prec=local_prec + 1)
-        if local_prec < prec:
-            return f"({lhs} {e.op} {rhs})"
-        else:
-            return f"{lhs} {e.op} {rhs}"
+        return f"({lhs} {e.op} {rhs})" if local_prec < prec else f"{lhs} {e.op} {rhs}"
     elif isinstance(e, Effects.Stride):
         return f"stride({e.name},{e.dim})"
     elif isinstance(e, Effects.Select):
@@ -158,7 +155,7 @@ def negate_expr(e):
     assert e.type == Tbool, "can only negate predicates"
     if isinstance(e, Effects.Const):
         return Effects.Const(not e.val, e.type, e.srcinfo)
-    elif isinstance(e, Effects.Var) or isinstance(e, Effects.ConfigField):
+    elif isinstance(e, (Effects.Var, Effects.ConfigField)):
         return Effects.Not(e, e.type, e.srcinfo)
     elif isinstance(e, Effects.Not):
         return e.arg
@@ -302,10 +299,7 @@ def _subcfg(env, eff):
             eff.srcinfo,
         )
     elif isinstance(eff, Effects.ConfigField):
-        if (eff.config, eff.field) in env:
-            return env[(eff.config, eff.field)]
-        else:
-            return eff
+        return env[(eff.config, eff.field)] if (eff.config, eff.field) in env else eff
     elif isinstance(eff, Effects.effect):
         return Effects.effect(
             [_subcfg(env, es) for es in eff.reads],
@@ -409,10 +403,9 @@ def eff_concat(e1, e2, srcinfo=None):
         assert ce.value is not None
         if not ce.pred:
             return ce.value
-        else:
-            # TODO: Fix! I'm not sure what is the intent here..
-            old_val = Effects.ConfigField(ce.config, ce.field, T.bool, srcinfo)
-            return Effects.Select(ce.pred, ce.value, old_val, T.bool, srcinfo)
+        # TODO: Fix! I'm not sure what is the intent here..
+        old_val = Effects.ConfigField(ce.config, ce.field, T.bool, srcinfo)
+        return Effects.Select(ce.pred, ce.value, old_val, T.bool, srcinfo)
 
     # substitute on the basis of writes in the first effect
     env = {(ce.config, ce.field): write_val(ce) for ce in e1.config_writes}
@@ -425,17 +418,15 @@ def eff_concat(e1, e2, srcinfo=None):
         overlap = set(cws1.keys()).intersection(set(cws2.keys()))
 
         def merge(w1, w2):
-            # in the case of the second write being unconditional
             if w2.pred is None:
                 return w2
-            else:
-                typ = w1.config.lookup(w1.field)[1]
-                assert typ == w2.config.lookup(w2.field)[1]
+            typ = w1.config.lookup(w1.field)[1]
+            assert typ == w2.config.lookup(w2.field)[1]
 
-                pred = _or_preds(w1.pred, w2.pred)
-                val = Effects.Select(w2.pred, w2.value, w1.value, typ, w2.srcinfo)
+            pred = _or_preds(w1.pred, w2.pred)
+            val = Effects.Select(w2.pred, w2.value, w1.value, typ, w2.srcinfo)
 
-                return Effects.config_eff(w1.config, w1.field, val, pred, w2.srcinfo)
+            return Effects.config_eff(w1.config, w1.field, val, pred, w2.srcinfo)
 
         return (
             [cws1[w] for w in cws1 if w not in overlap]
@@ -484,10 +475,7 @@ def eff_concat(e1, e2, srcinfo=None):
                 loc += [boolop("==", l1, l2).negate()]
 
             # construct loc predicate
-            if loc == []:
-                loc_e = Effects.Const(False, T.bool, write.srcinfo)
-            else:
-                loc_e = loc[0]
+            loc_e = Effects.Const(False, T.bool, write.srcinfo) if loc == [] else loc[0]
             for l in loc[1:]:
                 loc_e = boolop("or", loc_e, l)
 

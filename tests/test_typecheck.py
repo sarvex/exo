@@ -83,10 +83,10 @@ def test_sin2():
 def test_bool1():
     @proc
     def bool(b: bool):
-        assert b == True
+        assert b
 
         x: f32
-        if b == True:
+        if b:
             x = 0.0
 
 
@@ -169,12 +169,6 @@ def test_pass():
 
     return p
 
-    @proc
-    def p():
-        pass
-
-    return p
-
 
 def test_if1():
     with pytest.raises(TypeError, match="expected a bool expression"):
@@ -188,11 +182,8 @@ def test_if1():
 def test_if2():
     @proc
     def hoge():
-        if 1 == 0:
-            pass
-        else:
+        if 1 != 0:
             x: R
-            pass
 
 
 def test_par2():
@@ -213,7 +204,6 @@ def test_call_pass1():
 
         @proc
         def huga():
-            pass
             x: R
             hoge(3 + x)
 
@@ -442,7 +432,6 @@ def test_proj_bad():
     @proc
     def dot(m: size, x: R[1, 1], y: R[m]):
         huga: R
-        pass
 
     with pytest.raises(TypeError, match=msg):
 

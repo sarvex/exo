@@ -41,9 +41,9 @@ def get_observed_stmts(stmt_cursor):
         if type(prev_cursor) is _PC.InvalidCursor:
             prev_cursor = cursor.parent()
 
-            # This means cursor was the first statement in the proc
-            if type(prev_cursor) is _PC.InvalidCursor:
-                return
+        # This means cursor was the first statement in the proc
+        if type(prev_cursor) is _PC.InvalidCursor:
+            return
 
         cursor = prev_cursor
         yield cursor

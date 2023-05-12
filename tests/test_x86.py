@@ -496,11 +496,7 @@ def test_avx2_select_ps(compiler, simple_buffer_select):
     def run_and_check(N, x, v, y, z):
         expected = np.zeros(N, dtype=np.float32)
         for i in range(N):
-            if x[i] < v[i]:
-                expected[i] = y[i]
-            else:
-                expected[i] = z[i]
-
+            expected[i] = y[i] if x[i] < v[i] else z[i]
         out = np.array(np.random.rand(N), dtype=np.float32)
         x_copy = x.copy()
         v_copy = v.copy()

@@ -85,7 +85,7 @@ class SrcInfo:
 
 def get_srcinfo(depth=1):
     f = _curr_frame()
-    for k in range(0, depth):
+    for _ in range(0, depth):
         f = f.f_back
     finfo = _get_frame_info(f)
     filename, lineno, function = finfo.filename, finfo.lineno, finfo.function

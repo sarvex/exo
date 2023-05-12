@@ -12,25 +12,23 @@ class WeakCache(WeakKeyDictionary):
         self._dict = WeakKeyDictionary()
 
     def __contains__(self, key):
-        if isinstance(key, (tuple, list)):
-            lookup = self._tuple_dict
-            for k in key:
-                if k not in lookup:
-                    return False
-                else:
-                    lookup = lookup[k]
-            return _WC_Leaf in lookup
-        else:
+        if not isinstance(key, (tuple, list)):
             return key in self._dict
+        lookup = self._tuple_dict
+        for k in key:
+            if k not in lookup:
+                return False
+            else:
+                lookup = lookup[k]
+        return _WC_Leaf in lookup
 
     def __getitem__(self, key):
-        if isinstance(key, (tuple, list)):
-            lookup = self._tuple_dict
-            for k in key:
-                lookup = lookup[k]
-            return lookup[_WC_Leaf]
-        else:
+        if not isinstance(key, (tuple, list)):
             return self._dict[key]
+        lookup = self._tuple_dict
+        for k in key:
+            lookup = lookup[k]
+        return lookup[_WC_Leaf]
 
     def __setitem__(self, key, value):
         if isinstance(key, (tuple, list)):
@@ -83,7 +81,7 @@ class LoopIR_Dependencies(LoopIR_Do):
         self._buf_sym = buf_sym
         self._lhs = None
         self._depends = defaultdict(set)
-        self._alias = dict()
+        self._alias = {}
 
         # If `lhs` is not None, then `lhs` will become dependent
         # on anything read.
@@ -104,7 +102,7 @@ class LoopIR_Dependencies(LoopIR_Do):
         new = list(depends)
         done = []
         while True:
-            if len(new) == 0:
+            if not new:
                 break
             sym = new.pop()
             done.append(sym)
@@ -219,17 +217,11 @@ class LoopIR_Dependencies(LoopIR_Do):
             assert False, "bad case"
 
     def analyze_eff(self, eff, buf, write=False, read=False):
-        if read:
-            if any(es.buffer == buf for es in eff.reads):
-                return True
-        if write:
-            if any(es.buffer == buf for es in eff.writes):
-                return True
-        if read or write:
-            if any(es.buffer == buf for es in eff.reduces):
-                return True
-
-        return False
+        if read and any(es.buffer == buf for es in eff.reads):
+            return True
+        if write and any(es.buffer == buf for es in eff.writes):
+            return True
+        return bool((read or write) and any(es.buffer == buf for es in eff.reduces))
 
     def do_e(self, e):
         if isinstance(e, (LoopIR.Read, LoopIR.WindowExpr)):

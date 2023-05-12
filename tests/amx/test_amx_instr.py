@@ -585,17 +585,17 @@ def matmul_i8_2x2_blocks():
         )
         amx = set_memory(amx, f"Ctile{i}", AMX_TILE)
         amx = lift_alloc(amx, f"Ctile{i}:_", n_lifts=1)
-        for j in range(4 + i):
+        for _ in range(4 + i):
             amx = reorder_back(amx, f"i0 #{i}")
         amx = fission(amx, amx.find(f"for i0 in _:_ #{i}").after(), n_lifts=1)
         for j in range(i + 1, 4):
             amx = reorder_back(amx, f"ii #{j}")
         amx = fission(amx, amx.find("for ii in _:_ #3").after(), n_lifts=1)
     amx = simplify(amx)
-    for i in range(4):
+    for _ in range(4):
         amx = remove_loop(amx, "ko #0")
         amx = replace(amx, "for i0 in _:_ #0", ld_i32)
-    for i in range(4):
+    for _ in range(4):
         amx = remove_loop(amx, "ko #1")
         amx = replace(amx, "for i0 in _:_ #0", st_i32)
     amx = simplify(amx)
@@ -627,7 +627,7 @@ def test_matmul_on_amx_scheduled_i8(compiler, sde64, matmul_i8):
 
     t.add_body([f"transform_memory(NULL, {size2}, {size1}, y_orig, y);"])
     t.add_body([f"matmul_on_cpu(NULL, {size1}, {size2}, {size1}, x, y_orig, z);"])
-    t.add_body([f"matmul_on_amx(NULL, x, y, res);"])
+    t.add_body(["matmul_on_amx(NULL, x, y, res);"])
 
     t.add_body(
         [
@@ -764,8 +764,8 @@ def test_amx_memories_free(compiler, sde64):
     t.alloc_dram_2i32("z2", size1, size1, "0")  # expected result
     t.alloc_dram_2i32("res2", size1, size1, "0")
 
-    t.add_body([f"two_dpbssds(NULL, x1, y1, res1, x2, y2, res2);"])
-    t.add_body([f"jank_two_dpbssds(NULL, x1, y1, z1, x2, y2, z2);"])
+    t.add_body(["two_dpbssds(NULL, x1, y1, res1, x2, y2, res2);"])
+    t.add_body(["jank_two_dpbssds(NULL, x1, y1, z1, x2, y2, z2);"])
 
     t.add_body(
         [

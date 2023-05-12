@@ -24,7 +24,6 @@ def test_config_size():
     @proc
     def do_ld_i8(n: size):
         assert n == ConfigLoad.size
-        pass
 
     # @proc
     # def config_ld_i8(
@@ -55,7 +54,6 @@ def test_config_stride():
     @proc
     def do_ld_i8(n: size, src: [i8][n] @ DRAM):
         assert stride(src, 0) == ConfigLoad.src_stride
-        pass
 
     @proc
     def config_ld_i8(src_stride: stride):
@@ -233,7 +231,6 @@ def test_stride_with_config(golden):
     @proc
     def bar(n: size, src: [i8][n]):
         assert stride(src, 0) == ConfigLoad.src_stride
-        pass
 
     @proc
     def foo(n: size, src: [i8][n]):
@@ -265,7 +262,7 @@ def test_config_bind(golden):
         for i in seq(0, 10):
             tmp: f32
             tmp = 0.0
-            tmp = tmp * scale
+            tmp *= scale
 
     foo = bind_config(foo, "scale", ConfigLoad, "scale")
 

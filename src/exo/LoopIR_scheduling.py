@@ -84,14 +84,10 @@ class Cursor_Rewrite(LoopIR_Rewrite):
         return None
 
     def apply_stmts(self, old):
-        if (new := self.map_stmts(old)) is not None:
-            return new
-        return [o._node for o in old]
+        return [o._node for o in old] if (new := self.map_stmts(old)) is None else new
 
     def apply_s(self, old):
-        if (new := self.map_s(old)) is not None:
-            return new
-        return [old._node]
+        return new if (new := self.map_s(old)) is not None else [old._node]
 
     def map_stmts(self, stmts):
         new_stmts = []
@@ -108,10 +104,7 @@ class Cursor_Rewrite(LoopIR_Rewrite):
                 else:
                     new_stmts.append(s2)
 
-        if not needs_update:
-            return None
-
-        return new_stmts
+        return None if not needs_update else new_stmts
 
     def map_s(self, sc):
         s = sc._node
@@ -198,25 +191,16 @@ def name_plus_count(namestr):
 
 def iter_name_to_pattern(namestr):
     name, count = name_plus_count(namestr)
-    if count is not None:
-        count = f" #{count}"
-    else:
-        count = ""
-
-    pattern = f"for {name} in _: _{count}"
-    return pattern
+    count = f" #{count}" if count is not None else ""
+    return f"for {name} in _: _{count}"
 
 
 def nested_iter_names_to_pattern(namestr, inner):
     name, count = name_plus_count(namestr)
-    if count is not None:
-        count = f" #{count}"
-    else:
-        count = ""
+    count = f" #{count}" if count is not None else ""
     assert is_valid_name(inner)
 
-    pattern = f"for {name} in _:\n  for {inner} in _: _{count}"
-    return pattern
+    return f"for {name} in _:\n  for {inner} in _: _{count}"
 
 
 # --------------------------------------------------------------------------- #
@@ -261,10 +245,7 @@ def _replace_pats(ir, fwd, c, pat, repl, c_is_fwded=False, attrs=None):
     #   multi-way replacement?
     cur_fwd = lambda x: x
     for rd in match_pattern(c, pat):
-        if c_is_fwded:
-            rd = cur_fwd(rd)
-        else:
-            rd = cur_fwd(fwd(rd))
+        rd = cur_fwd(rd) if c_is_fwded else cur_fwd(fwd(rd))
         if not (c_repl := repl(rd)):
             continue
         ir, fwd_rd = _replace_helper(rd, c_repl, attrs)
@@ -277,10 +258,7 @@ def _replace_pats_stmts(ir, fwd, c, pat, repl, c_is_fwded=False, attrs=None):
     for block in match_pattern(c, pat):
         # needed because match_pattern on stmts return blocks
         assert len(block) == 1
-        if c_is_fwded:
-            s = cur_fwd(block[0])
-        else:
-            s = cur_fwd(fwd(block[0]))
+        s = cur_fwd(block[0]) if c_is_fwded else cur_fwd(fwd(block[0]))
         if not (c_repl := repl(s)):
             continue
         ir, fwd_s = _replace_helper(s, c_repl, attrs)
@@ -407,13 +385,13 @@ def DoProductLoop(outer_loop, new_name):
 
 def get_reads_of_expr(e):
     if isinstance(e, LoopIR.Read):
-        return sum([get_reads_of_expr(e) for e in e.idx], [(e.name, e.type)])
+        return sum((get_reads_of_expr(e) for e in e.idx), [(e.name, e.type)])
     elif isinstance(e, LoopIR.USub):
         return get_reads_of_expr(e.arg)
     elif isinstance(e, LoopIR.BinOp):
         return get_reads_of_expr(e.lhs) + get_reads_of_expr(e.rhs)
     elif isinstance(e, LoopIR.BuiltIn):
-        return sum([get_reads_of_expr(a) for a in e.args], [])
+        return sum((get_reads_of_expr(a) for a in e.args), [])
     elif isinstance(e, LoopIR.Const):
         return []
     else:
@@ -770,7 +748,7 @@ def DoInlineWindow(window_cursor):
     def calc_idx(idxs):
         win_idx = window_s.rhs.idx
         idxs = idxs.copy()  # make function non-destructive to input
-        assert len(idxs) == sum([isinstance(w, LoopIR.Interval) for w in win_idx])
+        assert len(idxs) == sum(isinstance(w, LoopIR.Interval) for w in win_idx)
 
         def add(x, y):
             return LoopIR.BinOp("+", x, y, T.index, x.srcinfo)
@@ -933,7 +911,7 @@ def DoBindExpr(new_name, expr_cursors, cse=False):
     assert expr_cursors
 
     if not cse:
-        expr_cursors = expr_cursors[0:1]
+        expr_cursors = expr_cursors[:1]
 
     expr = expr_cursors[0]._node
     assert isinstance(expr, LoopIR.expr)
@@ -963,10 +941,11 @@ def DoBindExpr(new_name, expr_cursors, cse=False):
             assert len(block) == 1
             sc = block[0]
             if sc._node.name in expr_reads:
-                if first_write_c:
-                    if less(sc, first_write_c):
-                        first_write_c = sc
-                else:
+                if (
+                    first_write_c
+                    and less(sc, first_write_c)
+                    or not first_write_c
+                ):
                     first_write_c = sc
                 break
         if first_write_c:
@@ -1130,10 +1109,10 @@ def get_reads_of_stmts(stmts):
     for s in stmts:
         if isinstance(s, LoopIR.Assign):
             reads += get_reads_of_expr(s.rhs)
-            reads += sum([get_reads_of_expr(idx) for idx in s.idx], [])
+            reads += sum((get_reads_of_expr(idx) for idx in s.idx), [])
         elif isinstance(s, LoopIR.Reduce):
             reads += get_reads_of_expr(s.rhs)
-            reads += sum([get_reads_of_expr(idx) for idx in s.idx], [])
+            reads += sum((get_reads_of_expr(idx) for idx in s.idx), [])
         elif isinstance(s, LoopIR.If):
             reads += get_reads_of_stmts(s.body)
             if s.orelse:
@@ -1141,12 +1120,10 @@ def get_reads_of_stmts(stmts):
         elif isinstance(s, LoopIR.Seq):
             reads += get_reads_of_stmts(s.body)
         elif isinstance(s, LoopIR.Call):
-            reads += sum([get_reads_of_expr(arg) for arg in s.args], [])
+            reads += sum((get_reads_of_expr(arg) for arg in s.args), [])
         elif isinstance(s, (LoopIR.WindowStmt, LoopIR.WriteConfig)):
             raise NotImplementedError("WindowStmt and WriteConfig not supported yet")
-        elif isinstance(s, (LoopIR.Pass, LoopIR.Alloc, LoopIR.Free)):
-            pass
-        else:
+        elif not isinstance(s, (LoopIR.Pass, LoopIR.Alloc, LoopIR.Free)):
             raise NotImplementedError(f"unknown stmt type {type(s)}")
     return reads
 
@@ -1166,9 +1143,9 @@ def get_writes_of_stmts(stmts):
             writes += get_writes_of_stmts(s.body)
         elif isinstance(s, (LoopIR.WindowStmt, LoopIR.WriteConfig)):
             raise NotImplementedError("WindowStmt and WriteConfig not supported yet")
-        elif isinstance(s, (LoopIR.Pass, LoopIR.Alloc, LoopIR.Free, LoopIR.Call)):
-            pass
-        else:
+        elif not isinstance(
+            s, (LoopIR.Pass, LoopIR.Alloc, LoopIR.Free, LoopIR.Call)
+        ):
             raise NotImplementedError(f"unknown stmt type {type(s)}")
     return writes
 
@@ -1227,7 +1204,7 @@ def DoLiftConstant(assign_c, loop_c):
 
     if not only_has_scaled_reduces:
         raise SchedulingError(
-            f"cannot lift constant because there are other operations on the same buffer that may interfere"
+            "cannot lift constant because there are other operations on the same buffer that may interfere"
         )
     if len(relevant_reduces) == 0:
         raise SchedulingError(
@@ -1392,7 +1369,7 @@ def DoRearrangeDim(alloc_cursor, permute_vector):
                 f"passed as a sub-procedure argument at {rd.srcinfo}"
             )
 
-        if not rd.name in all_permute:
+        if rd.name not in all_permute:
             return None
 
         if isinstance(rd, LoopIR.WindowExpr) and not check_permute_window(
@@ -1425,7 +1402,7 @@ def DoRearrangeDim(alloc_cursor, permute_vector):
         except ic.InvalidCursorError:
             break
 
-        for name in all_permute.keys():
+        for name in all_permute:
             ir, fwd = _replace_pats(ir, fwd, c, f"{name}[_]", mk_read, attrs=["idx"])
             ir, fwd = _replace_pats(
                 ir, fwd, c, f"stride({name}, _)", mk_stride_expr, attrs=["dim"]
@@ -1467,11 +1444,7 @@ class _DoRearrangeDim(Cursor_Rewrite):
         # where each index of the output window now refers to in the
         # buffer being windowed
         keep_perm = [i for i in permutation if isinstance(idx[i], LoopIR.Interval)]
-        # check that these indices are monotonic
-        for i, ii in zip(keep_perm[:-1], keep_perm[1:]):
-            if i > ii:
-                return False
-        return True
+        return all(i <= ii for i, ii in zip(keep_perm[:-1], keep_perm[1:]))
 
     def map_s(self, sc):
         s = sc._node
@@ -1485,13 +1458,14 @@ class _DoRearrangeDim(Cursor_Rewrite):
             return [LoopIR.Alloc(s.name, new_type, s.mem, None, s.srcinfo)]
 
         # Adjust the use-site
-        if isinstance(s, (LoopIR.Assign, LoopIR.Reduce)):
-            if self.should_permute(s.name):
-                # shuffle
-                new_idx = self.permute(s.name, s.idx)
-                return [
-                    type(s)(s.name, s.type, s.cast, new_idx, s.rhs, None, s.srcinfo)
-                ]
+        if isinstance(s, (LoopIR.Assign, LoopIR.Reduce)) and self.should_permute(
+            s.name
+        ):
+            # shuffle
+            new_idx = self.permute(s.name, s.idx)
+            return [
+                type(s)(s.name, s.type, s.cast, new_idx, s.rhs, None, s.srcinfo)
+            ]
 
         if isinstance(s, LoopIR.Call):
             # check that the arguments are not permuted buffers
@@ -1539,7 +1513,7 @@ def DoDivideDim(alloc_cursor, dim_idx, quotient):
     dim = old_shp[dim_idx]
     if not isinstance(dim, LoopIR.Const):
         raise SchedulingError(f"Cannot divide non-literal dimension: {dim}")
-    if not dim.val % quotient == 0:
+    if dim.val % quotient != 0:
         raise SchedulingError(f"Cannot divide {dim.val} evenly by {quotient}")
     denom = quotient
     numer = dim.val // denom
@@ -1689,13 +1663,15 @@ def DoLiftAllocSimple(alloc_cursor, n_lifts):
                 raise ic.InvalidCursorError(
                     f"Cannot lift allocation {alloc_stmt} beyond its root proc."
                 )
-            if isinstance(stmt_c._node, LoopIR.Seq):
-                if stmt_c._node.iter in szvars:
-                    raise SchedulingError(
-                        f"Cannot lift allocation statement {alloc_stmt} past loop "
-                        f"with iteration variable {i} because "
-                        f"the allocation size depends on {i}."
-                    )
+            if (
+                isinstance(stmt_c._node, LoopIR.Seq)
+                and stmt_c._node.iter in szvars
+            ):
+                raise SchedulingError(
+                    f"Cannot lift allocation statement {alloc_stmt} past loop "
+                    f"with iteration variable {i} because "
+                    f"the allocation size depends on {i}."
+                )
         except ic.InvalidCursorError:
             raise SchedulingError(
                 f"specified lift level {n_lifts} is more than {i}, "
@@ -1952,10 +1928,7 @@ class DoLiftAlloc(Cursor_Rewrite):
 
 
 def check_used(variables, eff):
-    for e in eff:
-        if e.buffer in variables:
-            return True
-    return False
+    return any(e.buffer in variables for e in eff)
 
 
 class _Is_Alloc_Free(LoopIR_Do):
@@ -2022,9 +1995,8 @@ class _FreeVars(LoopIR_Do):
         super().do_s(s)
 
     def do_e(self, e):
-        if isinstance(e, LoopIR.Read):
-            if e.name not in self._bound:
-                self._fvs.add(e.name)
+        if isinstance(e, LoopIR.Read) and e.name not in self._bound:
+            self._fvs.add(e.name)
 
         super().do_e(e)
 
@@ -2302,10 +2274,7 @@ class DoFissionLoops:
             # contain statements, so...
             single_stmt = s
 
-        if self.hit_fission:
-            return [], [single_stmt]
-        else:
-            return [single_stmt], []
+        return ([], [single_stmt]) if self.hit_fission else ([single_stmt], [])
 
 
 class DoAddUnsafeGuard(Cursor_Rewrite):
@@ -2497,8 +2466,8 @@ def _make_closure(name, stmts, var_types, order):
     fnargs = [LoopIR.fnarg(sz, T.size, None, info) for sz in sizes] + fnargs
 
     def shuffle(arg_list):
-        if sorted(order.values()) != [i for i in range(0, len(arg_list))]:
-            raise SchedulingError(f"expected to provide full ordering of arguments")
+        if sorted(order.values()) != list(range(0, len(arg_list))):
+            raise SchedulingError("expected to provide full ordering of arguments")
 
         new_args = [0 for a in arg_list]
         for key in order:
@@ -2595,10 +2564,7 @@ class DoExtractMethod(Cursor_Rewrite):
             body = self.map_stmts(sc.body())
             self.pop()
 
-            if body:
-                return [s.update(body=body, eff=None)]
-
-            return None
+            return [s.update(body=body, eff=None)] if body else None
         elif isinstance(s, LoopIR.If):
             self.push()
             body = self.map_stmts(sc.body())
@@ -2645,9 +2611,7 @@ class _DoNormalize(Cursor_Rewrite):
 
         super().__init__(proc)
 
-        # need to update self.ir with pred changes
-        new_preds = self.map_exprs(self.ir.preds)
-        if new_preds:
+        if new_preds := self.map_exprs(self.ir.preds):
             self.ir, fwd = (
                 ic.Cursor.create(self.ir)._child_block("preds")._replace(new_preds)
             )
@@ -2659,7 +2623,14 @@ class _DoNormalize(Cursor_Rewrite):
         )
 
     def concat_map(self, op, lhs, rhs):
-        if op == "+":
+        if op == "*":
+            # rhs or lhs NEEDS to be constant
+            assert len(rhs) == 1 or len(lhs) == 1
+            if len(rhs) == 1 and self.C in rhs:
+                return {key: lhs[key] * rhs[self.C] for key in lhs}
+            assert len(lhs) == 1 and self.C in lhs
+            return {key: rhs[key] * lhs[self.C] for key in rhs}
+        elif op == "+":
             # if has same key: add value
             common = {key: (lhs[key] + rhs[key]) for key in lhs if key in rhs}
             return lhs | rhs | common
@@ -2669,15 +2640,6 @@ class _DoNormalize(Cursor_Rewrite):
             # else, negate the rhs and cat map
             neg_rhs = {key: -rhs[key] for key in rhs}
             return lhs | neg_rhs | common
-        elif op == "*":
-            # rhs or lhs NEEDS to be constant
-            assert len(rhs) == 1 or len(lhs) == 1
-            # multiply the other one's value by that constant
-            if len(rhs) == 1 and self.C in rhs:
-                return {key: lhs[key] * rhs[self.C] for key in lhs}
-            else:
-                assert len(lhs) == 1 and self.C in lhs
-                return {key: rhs[key] * lhs[self.C] for key in rhs}
         else:
             assert False, "bad case"
 
@@ -2711,12 +2673,11 @@ class _DoNormalize(Cursor_Rewrite):
         elif isinstance(e, LoopIR.USub):
             return _DoNormalize.has_div_mod_config(e.arg)
         elif isinstance(e, LoopIR.BinOp):
-            if e.op == "/" or e.op == "%":
+            if e.op in ["/", "%"]:
                 return True
-            else:
-                lhs = _DoNormalize.has_div_mod_config(e.lhs)
-                rhs = _DoNormalize.has_div_mod_config(e.rhs)
-                return lhs or rhs
+            lhs = _DoNormalize.has_div_mod_config(e.lhs)
+            rhs = _DoNormalize.has_div_mod_config(e.rhs)
+            return lhs or rhs
         elif isinstance(e, LoopIR.ReadConfig):
             return True
         else:

@@ -78,9 +78,7 @@ class IndexRangeAnalysis:
             return (e.val, e.val)
         elif isinstance(e, LoopIR.USub):
             e_range = self._analyze_range(e.arg)
-            if e_range is None:
-                return None
-            return (-e_range[1], -e_range[0])
+            return None if e_range is None else (-e_range[1], -e_range[0])
         elif isinstance(e, LoopIR.BinOp):
             lhs_range = self._analyze_range(e.lhs)
             rhs_range = self._analyze_range(e.rhs)

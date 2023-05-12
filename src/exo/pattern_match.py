@@ -182,9 +182,6 @@ class PatternMatch:
             self.find_stmts_in_block(pats, curs[0].orelse())
         elif isinstance(curs[0]._node, LoopIR.Seq):
             self.find_stmts_in_block(pats, curs[0].body())
-        else:
-            pass  # other forms of statement do not contain stmt blocks
-
         # second, recurse on the tail of this sequence...
         self.find_stmts_in_block(pats, curs[1:])
 
@@ -291,13 +288,12 @@ class PatternMatch:
                 self.match_e(pi, si) for pi, si in zip(pat.idx, e.idx)
             )
         elif isinstance(e, LoopIR.WindowExpr):
-            if isinstance(pat, PAST.Read):
-                # TODO: Should we be able to handle window slicing matching? Nah..
-                if len(pat.idx) != 1 or not isinstance(pat.idx[0], PAST.E_Hole):
-                    return False
-                return self.match_name(pat.name, e.name)
-            else:
+            if not isinstance(pat, PAST.Read):
                 return False
+            # TODO: Should we be able to handle window slicing matching? Nah..
+            if len(pat.idx) != 1 or not isinstance(pat.idx[0], PAST.E_Hole):
+                return False
+            return self.match_name(pat.name, e.name)
         elif isinstance(e, LoopIR.Const):
             return pat.val == e.val
         elif isinstance(e, LoopIR.BinOp):
@@ -324,7 +320,7 @@ class PatternMatch:
 
     @staticmethod
     def match_name(pat_nm, ir_sym):
-        return pat_nm == "_" or pat_nm == str(ir_sym)
+        return pat_nm in ["_", str(ir_sym)]
 
 
 def _children(cur) -> Iterable[Node]:

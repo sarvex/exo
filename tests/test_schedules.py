@@ -106,7 +106,6 @@ def test_product_loop5(golden):
 def test_delete_pass(golden):
     @proc
     def foo(x: R):
-        pass
         x = 0.0
 
     assert str(delete_pass(foo)) == golden
@@ -681,7 +680,7 @@ def test_expand_dim6(golden):
                 a: i8[m]
                 a[j] = a[j] + 1.0
                 a[j] += 1.0
-                bar(m, a[0:m])
+                bar(m, a[:m])
 
     foo = expand_dim(foo, "a : _", "n", "i")
     assert str(foo) == golden
@@ -866,10 +865,7 @@ def test_fuse_if(golden):
     def foo(x: R, a: index, b: index):
         if a == b:
             x += 1.0
-        if a - b == 0:
-            x += 2.0
-        else:
-            x += 3.0
+        x += 2.0 if a - b == 0 else 3.0
 
     foo = fuse(foo, "if a==b:_", "if _==0: _")
     assert str(foo) == golden
@@ -1147,7 +1143,7 @@ def test_bool_partial_eval(golden):
     def bar(b: bool, n: size, A: i8[n]):
         tmp: i8[n]
         for i in seq(0, n):
-            if b == True:
+            if b:
                 tmp[i] = A[i]
 
     bar = bar.partial_eval(False)
@@ -1459,9 +1455,7 @@ def test_lift_if_second_statement_in_else_error():
     @proc
     def foo(m: size, x: R[m]):
         for i in seq(0, m):
-            if m > 12:
-                pass
-            else:
+            if m <= 12:
                 x[0] = 1.0
                 if i < 10:
                     x[i] = 2.0
@@ -1520,9 +1514,8 @@ def test_lift_if_past_if(golden):
     @proc
     def foo(n: size, x: R[n], i: index):
         assert i > 0
-        if i < n:
-            if i < 10:
-                x[i] = 1.0
+        if i < n and i < 10:
+            x[i] = 1.0
 
     foo = lift_if(foo, "if i < 10: _")
     assert str(foo) == golden
@@ -1543,9 +1536,8 @@ def test_lift_if_halfway(golden):
     @proc
     def foo(n: size, x: R[n], i: index):
         for j in seq(0, n):
-            if n > 20:
-                if i < 10:
-                    x[j] = 1.0
+            if n > 20 and i < 10:
+                x[j] = 1.0
 
     foo = lift_if(foo, "if i < 10: _")
     assert str(foo) == golden
@@ -1555,9 +1547,8 @@ def test_lift_if_past_if_then_for(golden):
     @proc
     def foo(n: size, x: R[n], i: index):
         for j in seq(0, n):
-            if n > 20:
-                if i < 10:
-                    x[j] = 1.0
+            if n > 20 and i < 10:
+                x[j] = 1.0
 
     foo = lift_if(foo, "if i < 10: _", n_lifts=2)
     assert str(foo) == golden
@@ -1567,9 +1558,8 @@ def test_lift_if_middle(golden):
     @proc
     def foo(n: size, x: R[n], i: index):
         for j in seq(0, n):
-            if n > 20:
-                if i < 10:
-                    x[j] = 1.0
+            if n > 20 and i < 10:
+                x[j] = 1.0
 
     foo = lift_if(foo, "if n > 20: _")
     assert str(foo) == golden
@@ -1580,10 +1570,7 @@ def test_lift_if_with_else_past_if(golden):
     def foo(n: size, x: R[n], i: size):
         assert n > 10
         if i < 10:
-            if n > 20:
-                x[i] = 1.0
-            else:
-                x[i] = 2.0
+            x[i] = 1.0 if n > 20 else 2.0
 
     foo = lift_if(foo, "if n > 20: _")
     assert str(foo) == golden
@@ -1595,10 +1582,7 @@ def test_lift_if_with_else_past_if_with_else(golden):
         assert n > 10
         assert i < n
         if i < 10:
-            if n > 20:
-                x[i] = 1.0
-            else:
-                x[i] = 2.0
+            x[i] = 1.0 if n > 20 else 2.0
         else:
             x[i] = 3.0
 
@@ -1609,9 +1593,8 @@ def test_lift_if_with_else_past_if_with_else(golden):
 def test_lift_if_with_pass_body(golden):
     @proc
     def foo(n: size):
-        if 10 < n:
-            if n < 20:
-                pass
+        if 10 < n and n < 20:
+            pass
 
     foo = lift_if(foo, "if n < 20: _")
     assert str(foo) == golden
@@ -1620,11 +1603,8 @@ def test_lift_if_with_pass_body(golden):
 def test_lift_if_with_pass_body_and_else(golden):
     @proc
     def foo(n: size):
-        if 10 < n:
-            if n < 20:
-                pass
-            else:
-                pass
+        if 10 < n and n < 20:
+            pass
 
     foo = lift_if(foo, "if n < 20: _")
     assert str(foo) == golden
@@ -1636,10 +1616,7 @@ def test_lift_if_in_else_branch_of_parent(golden):
         if 10 < n:
             x[0] = 1.0
         else:
-            if n < 20:
-                x[0] = 2.0
-            else:
-                x[0] = 3.0
+            x[0] = 2.0 if n < 20 else 3.0
 
     foo = lift_if(foo, "if n < 20: _")
     assert str(foo) == golden
@@ -1649,15 +1626,9 @@ def test_lift_if_in_full_nest(golden):
     @proc
     def foo(n: size, x: R[n]):
         if 10 < n:
-            if n < 15:
-                x[0] = 1.0
-            else:
-                x[0] = 2.0
+            x[0] = 1.0 if n < 15 else 2.0
         else:
-            if n < 20:
-                x[0] = 3.0
-            else:
-                x[0] = 4.0
+            x[0] = 3.0 if n < 20 else 4.0
 
     foo = lift_if(foo, "if n < 20: _")
     assert str(foo) == golden
@@ -1681,8 +1652,6 @@ def test_lift_scope_lift_for_when_outer_if_has_noelse_error(golden):
         if n < 10:
             for i in seq(0, n):
                 x[i] = 1.0
-        else:
-            pass
 
     with pytest.raises(
         SchedulingError, match="cannot lift for loop when if has an orelse clause"

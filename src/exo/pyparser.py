@@ -200,8 +200,7 @@ class Parser:
     def eval_expr(self, expr):
         assert isinstance(expr, pyast.expr)
         code = compile(pyast.Expression(expr), "", "eval")
-        e_obj = eval(code, self.globals, self.locals)
-        return e_obj
+        return eval(code, self.globals, self.locals)
 
     # - # - # - # - # - # - # - # - # - # - # - # - # - # - # - #
     # structural parsing rules...
@@ -210,13 +209,6 @@ class Parser:
         assert isinstance(fdef, pyast.FunctionDef)
 
         fargs = fdef.args
-        bad_arg_syntax_errmsg = """
-    Exo expects function arguments to not use these python features:
-      - position-only arguments
-      - unnamed (position or keyword) arguments (i.e. *varargs, **kwargs)
-      - keyword-only arguments
-      - default argument values
-    """
         if (
             len(fargs.posonlyargs) > 0
             or fargs.vararg is not None
@@ -225,6 +217,13 @@ class Parser:
             or fargs.kwarg is not None
             or len(fargs.defaults) > 0
         ):
+            bad_arg_syntax_errmsg = """
+    Exo expects function arguments to not use these python features:
+      - position-only arguments
+      - unnamed (position or keyword) arguments (i.e. *varargs, **kwargs)
+      - keyword-only arguments
+      - default argument values
+    """
             self.err(fargs, bad_arg_syntax_errmsg)
 
         # process each argument in order
@@ -242,11 +241,7 @@ class Parser:
                 self.err(a, f"repeated argument name: '{a.arg}'")
             names.add(a.arg)
             nm = Sym(a.arg)
-            if isinstance(typ, UAST.Size):
-                self.locals[a.arg] = SizeStub(nm)
-            else:
-                # note we don't need to stub the index variables
-                self.locals[a.arg] = nm
+            self.locals[a.arg] = SizeStub(nm) if isinstance(typ, UAST.Size) else nm
             args.append(UAST.fnarg(nm, typ, mem, self.getsrcinfo(a)))
 
         # return types are non-sensical for Exo, b/c it models procedures
@@ -260,7 +255,7 @@ class Parser:
             fdef.body[first_non_assert], pyast.Assert
         ):
             first_non_assert += 1
-        assertions = fdef.body[0:first_non_assert]
+        assertions = fdef.body[:first_non_assert]
         pyast_body = fdef.body[first_non_assert:]
 
         # then parse out predicates from the assertions
@@ -289,7 +284,7 @@ class Parser:
 
         name = cls.name
         if len(cls.bases) > 0:
-            self.err(cls, f"expected no base classes in a config definition")
+            self.err(cls, "expected no base classes in a config definition")
         # ignore cls.keywords and cls.decorator_list
 
         fields = [self.parse_config_field(stmt) for stmt in cls.body]
@@ -457,20 +452,16 @@ class Parser:
                 if isinstance(node.slice, pyast.Slice):
                     self.err(node, "index-slicing not allowed")
                 else:
-                    if isinstance(node.slice, pyast.Tuple):
-                        dims = node.slice.elts
-                    else:
-                        dims = [node.slice]
+                    dims = node.slice.elts if isinstance(node.slice, pyast.Tuple) else [node.slice]
+            elif isinstance(node.slice, (pyast.Slice, pyast.ExtSlice)):
+                self.err(node, "index-slicing not allowed")
             else:
-                if isinstance(node.slice, (pyast.Slice, pyast.ExtSlice)):
-                    self.err(node, "index-slicing not allowed")
-                else:
-                    assert isinstance(node.slice, pyast.Index)
-                    if isinstance(node.slice.value, pyast.Tuple):
-                        dims = node.slice.value.elts
-                    else:
-                        dims = [node.slice.value]
-
+                assert isinstance(node.slice, pyast.Index)
+                dims = (
+                    node.slice.value.elts
+                    if isinstance(node.slice.value, pyast.Tuple)
+                    else [node.slice.value]
+                )
             # convert the dimension list into a full tensor type
             exprs = [self.parse_expr(idx) for idx in dims]
             typ = UAST.Tensor(exprs, is_window, typ)
@@ -480,7 +471,7 @@ class Parser:
         elif isinstance(node, pyast.Name) and node.id in Parser._prim_types:
             return Parser._prim_types[node.id]
         else:
-            self.err(node, "unrecognized type: " + astor.dump_tree(node))
+            self.err(node, f"unrecognized type: {astor.dump_tree(node)}")
 
     def parse_stmt_block(self, stmts):
         assert isinstance(stmts, list)
@@ -633,7 +624,6 @@ class Parser:
                             self.err(s, "only += reductions currently supported")
                         rstmts.append(UAST.Reduce(nm, idxs, rhs, self.getsrcinfo(s)))
 
-            # ----- For Loop parsing
             elif isinstance(s, pyast.For):
                 if len(s.orelse) > 0:
                     self.err(s, "else clause on for-loops unsupported")
@@ -656,7 +646,6 @@ class Parser:
 
                 self.pop()
 
-            # ----- If statement parsing
             elif isinstance(s, pyast.If):
                 cond = self.parse_expr(s.test)
 
@@ -669,7 +658,6 @@ class Parser:
 
                 rstmts.append(self.AST.If(cond, body, orelse, self.getsrcinfo(s)))
 
-            # ----- Sub-routine call parsing
             elif (
                 isinstance(s, pyast.Expr)
                 and isinstance(s.value, pyast.Call)
@@ -714,9 +702,7 @@ class Parser:
                 else:
                     f = self.eval_expr(s.value.func)
                     if not isinstance(f, ProcedureBase):
-                        self.err(
-                            s.value.func, f"expected called object " "to be a procedure"
-                        )
+                        self.err(s.value.func, 'expected called object to be a procedure')
 
                     if len(s.value.keywords) > 0:
                         self.err(
@@ -729,11 +715,9 @@ class Parser:
                         UAST.Call(f.INTERNAL_proc(), args, self.getsrcinfo(s.value))
                     )
 
-            # ----- Pass no-op parsing
             elif isinstance(s, pyast.Pass):
                 rstmts.append(self.AST.Pass(self.getsrcinfo(s)))
 
-            # ----- Stmt Hole parsing
             elif (
                 isinstance(s, pyast.Expr)
                 and isinstance(s.value, pyast.Name)
@@ -752,28 +736,27 @@ class Parser:
         return rstmts
 
     def parse_loop_cond(self, cond):
-        if isinstance(cond, pyast.Call):
-            if isinstance(cond.func, pyast.Name) and cond.func.id in ("par", "seq"):
-                if len(cond.keywords) > 0:
-                    self.err(
-                        cond, "par() and seq() does not support" " named arguments"
-                    )
-                elif len(cond.args) != 2:
-                    self.err(cond, "par() and seq() expects exactly" " 2 arguments")
-                lo = self.parse_expr(cond.args[0])
-                hi = self.parse_expr(cond.args[1])
-                if cond.func.id == "par":
-                    return UAST.ParRange(lo, hi, self.getsrcinfo(cond))
-                else:
-                    return UAST.SeqRange(lo, hi, self.getsrcinfo(cond))
-            else:
-                self.err(
-                    cond,
-                    "expected for loop condition to be in the form "
-                    "'par(...,...)' or 'seq(...,...)'",
-                )
-        else:
+        if not isinstance(cond, pyast.Call):
             return self.parse_expr(cond)
+        if isinstance(cond.func, pyast.Name) and cond.func.id in ("par", "seq"):
+            if len(cond.keywords) > 0:
+                self.err(
+                    cond, "par() and seq() does not support" " named arguments"
+                )
+            elif len(cond.args) != 2:
+                self.err(cond, "par() and seq() expects exactly" " 2 arguments")
+            lo = self.parse_expr(cond.args[0])
+            hi = self.parse_expr(cond.args[1])
+            if cond.func.id == "par":
+                return UAST.ParRange(lo, hi, self.getsrcinfo(cond))
+            else:
+                return UAST.SeqRange(lo, hi, self.getsrcinfo(cond))
+        else:
+            self.err(
+                cond,
+                "expected for loop condition to be in the form "
+                "'par(...,...)' or 'seq(...,...)'",
+            )
 
     # parse the left-hand-side of an assignment
     def parse_lvalue(self, node):
@@ -788,22 +771,18 @@ class Parser:
         elif isinstance(node, pyast.Subscript):
             if sys.version_info[:3] >= (3, 9):
                 # unpack single or multi-arg indexing to list of slices/indices
-                if isinstance(node.slice, pyast.Tuple):
-                    dims = node.slice.elts
-                else:
-                    dims = [node.slice]
+                dims = node.slice.elts if isinstance(node.slice, pyast.Tuple) else [node.slice]
+            elif isinstance(node.slice, pyast.Slice):
+                dims = [node.slice]
+            elif isinstance(node.slice, pyast.ExtSlice):
+                dims = node.slice.dims
             else:
-                if isinstance(node.slice, pyast.Slice):
-                    dims = [node.slice]
-                elif isinstance(node.slice, pyast.ExtSlice):
-                    dims = node.slice.dims
-                else:
-                    assert isinstance(node.slice, pyast.Index)
-                    if isinstance(node.slice.value, pyast.Tuple):
-                        dims = node.slice.value.elts
-                    else:
-                        dims = [node.slice.value]
-
+                assert isinstance(node.slice, pyast.Index)
+                dims = (
+                    node.slice.value.elts
+                    if isinstance(node.slice.value, pyast.Tuple)
+                    else [node.slice.value]
+                )
             if not isinstance(node.value, pyast.Name):
                 self.err(node, "expected access to have form 'x' or 'x[...]'")
 
@@ -822,26 +801,24 @@ class Parser:
 
         if sys.version_info[:3] >= (3, 9):
             srcinfo = self.getsrcinfo(e)
+        elif isinstance(e, pyast.Index):
+            e = e.value
+            srcinfo = self.getsrcinfo(e)
         else:
-            if isinstance(e, pyast.Index):
-                e = e.value
-                srcinfo = self.getsrcinfo(e)
-            else:
-                srcinfo = self.getsrcinfo(node)
+            srcinfo = self.getsrcinfo(node)
 
-        if isinstance(e, pyast.Slice):
-            lo = None if e.lower is None else self.parse_expr(e.lower)
-            hi = None if e.upper is None else self.parse_expr(e.upper)
-            if e.step is not None:
-                self.err(
-                    e,
-                    "expected windowing to have the form x[:], "
-                    "x[i:], x[:j], or x[i:j], but not x[i:j:k]",
-                )
-
-            return UAST.Interval(lo, hi, srcinfo)
-        else:
+        if not isinstance(e, pyast.Slice):
             return UAST.Point(self.parse_expr(e), srcinfo)
+        lo = None if e.lower is None else self.parse_expr(e.lower)
+        hi = None if e.upper is None else self.parse_expr(e.upper)
+        if e.step is not None:
+            self.err(
+                e,
+                "expected windowing to have the form x[:], "
+                "x[i:], x[:j], or x[i:j], but not x[i:j:k]",
+            )
+
+        return UAST.Interval(lo, hi, srcinfo)
 
     # parse expressions, including values, indices, and booleans
     def parse_expr(self, e):
@@ -1046,15 +1023,12 @@ class Parser:
 
                 return self.AST.StrideExpr(name, dim, self.getsrcinfo(e))
 
-            # handle built-in functions
             else:
                 f = self.eval_expr(e.func)
                 fname = e.func.id
 
                 if not isinstance(f, BuiltIn):
-                    self.err(
-                        e.func, f"expected called object " "to be a builtin function"
-                    )
+                    self.err(e.func, 'expected called object to be a builtin function')
 
                 if len(e.keywords) > 0:
                     self.err(

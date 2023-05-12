@@ -8,19 +8,19 @@ from exo.platforms.gemmini import *
 def conv_algorithm():
     @proc
     def conv(
-        batch_size: size,
-        out_dim: size,
-        out_channel: size,
-        kernel_dim: size,
-        in_channel: size,
-        in_dim: size,
-        output: i8[batch_size, out_dim, out_dim, out_channel],
-        bias: i32[1, out_channel],
-        inp: i8[batch_size, in_dim, in_dim, in_channel],
-        weights: i8[kernel_dim, kernel_dim, in_channel, out_channel],
-        act: bool,
-        scale: f32,
-    ):
+            batch_size: size,
+            out_dim: size,
+            out_channel: size,
+            kernel_dim: size,
+            in_channel: size,
+            in_dim: size,
+            output: i8[batch_size, out_dim, out_dim, out_channel],
+            bias: i32[1, out_channel],
+            inp: i8[batch_size, in_dim, in_dim, in_channel],
+            weights: i8[kernel_dim, kernel_dim, in_channel, out_channel],
+            act: bool,
+            scale: f32,
+        ):
 
         assert out_dim == in_dim - kernel_dim + 1
 
@@ -54,11 +54,12 @@ def conv_algorithm():
                         acc_scale(src_tmp, tmp_res1, scale)
                         tmp_res2: i8
                         clamp(tmp_res1, tmp_res2)
-                        if act == True:
+                        if act:
                             tmp_res2 = relu(tmp_res2)
 
                         output[b, orow, ocol, och] = tmp_res2
-        # Algorithm ends here. 26 lines excluding newlines
+            # Algorithm ends here. 26 lines excluding newlines
+
 
     return conv
 

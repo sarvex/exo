@@ -41,10 +41,10 @@ for filename in sys.argv[1:]:
                 )
                 aspect_plots[series]["flops"].append(float(point["flops"]))
 
-for series, points in square_plots.items():
+for points in square_plots.values():
     points["n"], points["flops"] = zip(*sorted(zip(points["n"], points["flops"])))
 
-for series, points in aspect_plots.items():
+for points in aspect_plots.values():
     points["ratio"], points["flops"] = zip(
         *sorted(zip(points["ratio"], points["flops"]))
     )

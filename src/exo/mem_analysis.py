@@ -28,7 +28,7 @@ class MemoryAnalysis:
         self.push()
         body = self.mem_stmts(proc.body)
         self.pop()
-        assert len(self.tofree) == 0
+        assert not self.tofree
 
         return LoopIR.proc(
             proc.name,

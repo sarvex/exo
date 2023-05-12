@@ -62,11 +62,7 @@ def ctyp(typ):
         return "int32_t"
     elif isinstance(typ, LoopIR.T.Bool):
         return "bool"
-    elif (
-        isinstance(typ, LoopIR.T.Index)
-        or isinstance(typ, LoopIR.T.Size)
-        or isinstance(typ, LoopIR.T.Stride)
-    ):
+    elif isinstance(typ, (LoopIR.T.Index, LoopIR.T.Size, LoopIR.T.Stride)):
         return "int_fast32_t"
     else:
         assert False, f"bad case! {typ}"

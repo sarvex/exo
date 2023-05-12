@@ -30,7 +30,7 @@ from .memory import *
 class TypeChecker:
     def __init__(self, proc):
         self.uast_proc = proc
-        self.env = dict()
+        self.env = {}
         self.errors = []
 
         args = []
@@ -45,8 +45,8 @@ class TypeChecker:
         preds = []
         for p in proc.preds:
             pred = self.check_e(p)
-            if pred.type != T.err and pred.type != T.bool:
-                self.err(pred, f"expected a bool expression")
+            if pred.type not in [T.err, T.bool]:
+                self.err(pred, "expected a bool expression")
             preds.append(pred)
 
         body = self.check_stmts(proc.body)
@@ -65,7 +65,7 @@ class TypeChecker:
         )
 
         # do error checking here
-        if len(self.errors) > 0:
+        if self.errors:
             raise TypeError(
                 "Errors occurred during typechecking:\n" + "\n".join(self.errors)
             )
@@ -179,36 +179,35 @@ class TypeChecker:
             ftyp = stmt.config.lookup(stmt.field)[1]
             rhs = self.check_e(stmt.rhs)
 
-            if rhs.type != T.err:
-                if ftyp.is_real_scalar():
-                    if not rhs.type.is_real_scalar():
-                        self.err(
-                            rhs,
-                            f"expected a real scalar value, but "
-                            f"got an expression of type {rhs.type}",
-                        )
-                elif ftyp.is_indexable():
-                    if not rhs.type.is_indexable():
-                        self.err(
-                            rhs,
-                            f"expected an index or size type "
-                            f"expression, but got type {rhs.type}",
-                        )
-                elif ftyp == T.bool:
-                    if rhs.type != T.bool:
-                        self.err(
-                            rhs,
-                            f"expected a bool expression, but got type {rhs.type}",
-                        )
-                elif ftyp.is_stridable():
-                    if not rhs.type.is_stridable():
-                        self.err(
-                            rhs,
-                            f"expected a stride type expression, "
-                            f"but got type {rhs.type}",
-                        )
-                else:
-                    assert False, "bad case"
+            if ftyp.is_real_scalar():
+                if rhs.type != T.err and not rhs.type.is_real_scalar():
+                    self.err(
+                        rhs,
+                        f"expected a real scalar value, but "
+                        f"got an expression of type {rhs.type}",
+                    )
+            elif ftyp.is_indexable():
+                if rhs.type != T.err and not rhs.type.is_indexable():
+                    self.err(
+                        rhs,
+                        f"expected an index or size type "
+                        f"expression, but got type {rhs.type}",
+                    )
+            elif ftyp == T.bool:
+                if rhs.type not in [T.err, T.bool]:
+                    self.err(
+                        rhs,
+                        f"expected a bool expression, but got type {rhs.type}",
+                    )
+            elif ftyp.is_stridable():
+                if rhs.type != T.err and not rhs.type.is_stridable():
+                    self.err(
+                        rhs,
+                        f"expected a stride type expression, "
+                        f"but got type {rhs.type}",
+                    )
+            elif rhs.type != T.err:
+                assert False, "bad case"
 
             return [
                 LoopIR.WriteConfig(stmt.config, stmt.field, rhs, None, stmt.srcinfo)
@@ -218,29 +217,27 @@ class TypeChecker:
 
         elif isinstance(stmt, UAST.If):
             cond = self.check_e(stmt.cond)
-            if cond.type != T.err and cond.type != T.bool:
-                self.err(cond, f"expected a bool expression")
+            if cond.type not in [T.err, T.bool]:
+                self.err(cond, "expected a bool expression")
             body = self.check_stmts(stmt.body)
-            ebody = []
-            if len(stmt.orelse) > 0:
-                ebody = self.check_stmts(stmt.orelse)
+            ebody = self.check_stmts(stmt.orelse) if len(stmt.orelse) > 0 else []
             return [LoopIR.If(cond, body, ebody, None, stmt.srcinfo)]
 
         elif isinstance(stmt, UAST.Seq):
             self.env[stmt.iter] = T.index
-
-            # handle standard ParRanges
-            parerr = (
-                "currently supporting for-loops of the form:\n"
-                "  'for _ in par(0, affine_expression):' and "
-                "'for _ in seq(0, affine_expression):'"
-            )
 
             if not (
                 isinstance(stmt.cond, (UAST.ParRange, UAST.SeqRange))
                 and isinstance(stmt.cond.lo, UAST.Const)
                 and stmt.cond.lo.val == 0
             ):
+                # handle standard ParRanges
+                parerr = (
+                    "currently supporting for-loops of the form:\n"
+                    "  'for _ in par(0, affine_expression):' and "
+                    "'for _ in seq(0, affine_expression):'"
+                )
+
                 self.err(stmt.cond, parerr)
 
             hi = self.check_e(stmt.cond.hi)
@@ -266,8 +263,8 @@ class TypeChecker:
 
             for call_a, sig_a in zip(args, stmt.f.args):
                 if call_a.type == T.err:
-                    pass
-                elif sig_a.type is T.size or sig_a.type is T.index:
+                    continue
+                if sig_a.type is T.size or sig_a.type is T.index:
                     if not call_a.type.is_indexable():
                         self.err(
                             call_a,
@@ -277,7 +274,7 @@ class TypeChecker:
                         )
 
                 elif sig_a.type is T.bool:
-                    if not call_a.type is T.bool:
+                    if call_a.type is not T.bool:
                         self.err(
                             call_a,
                             "expected bool-type variable, "
@@ -429,7 +426,7 @@ class TypeChecker:
             typ = T.err
             if lhs.type == T.err or rhs.type == T.err:
                 typ = T.err
-            elif e.op == "and" or e.op == "or":
+            elif e.op in ["and", "or"]:
                 if lhs.type is not T.bool:
                     self.err(lhs, "expected 'bool' argument to logical op")
                 if rhs.type is not T.bool:
@@ -444,13 +441,7 @@ class TypeChecker:
                 and (lhs.type != T.int or rhs.type != T.int)
             ):
                 typ = T.bool
-            elif (
-                e.op == "<"
-                or e.op == "<="
-                or e.op == "=="
-                or e.op == ">"
-                or e.op == ">="
-            ):
+            elif e.op in ["<", "<=", "==", ">", ">="]:
                 if not lhs.type.is_indexable():
                     self.err(
                         lhs,
@@ -464,9 +455,7 @@ class TypeChecker:
                         f"comparison op: {e.op}",
                     )
                 typ = T.bool
-            elif (
-                e.op == "+" or e.op == "-" or e.op == "*" or e.op == "/" or e.op == "%"
-            ):
+            elif e.op in ["+", "-", "*", "/", "%"]:
                 if lhs.type.is_real_scalar():
                     if not rhs.type.is_real_scalar():
                         self.err(rhs, "expected scalar type")
@@ -474,17 +463,16 @@ class TypeChecker:
                     elif e.op == "%":
                         self.err(e, "cannot compute modulus of 'R' values")
                         typ = T.err
-                    else:
-                        if lhs.type == T.R:
-                            typ = T.R
-                        elif lhs.type == T.f32:
-                            typ = T.f32
-                        elif lhs.type == T.f64:
-                            typ = T.f64
-                        elif lhs.type == T.int8:
-                            typ = T.int8
-                        elif lhs.type == T.int32:
-                            typ = T.int32
+                    elif lhs.type == T.R:
+                        typ = T.R
+                    elif lhs.type == T.f32:
+                        typ = T.f32
+                    elif lhs.type == T.f64:
+                        typ = T.f64
+                    elif lhs.type == T.int8:
+                        typ = T.int8
+                    elif lhs.type == T.int32:
+                        typ = T.int32
                 elif rhs.type.is_real_scalar():
                     self.err(lhs, "expected scalar type")
                 elif lhs.type == T.bool or rhs.type == T.bool:
@@ -501,7 +489,7 @@ class TypeChecker:
                 else:
                     assert lhs.type.is_indexable()
                     assert rhs.type.is_indexable()
-                    if e.op == "/" or e.op == "%":
+                    if e.op in ["/", "%"]:
                         if rhs.type != T.int or not isinstance(rhs, LoopIR.Const):
                             self.err(
                                 rhs,
@@ -530,13 +518,12 @@ class TypeChecker:
                                 "the result would be non-affine",
                             )
                             typ = T.err
-                    else:  # + or -
-                        if lhs.type == T.index or rhs.type == T.index:
-                            typ = T.index
-                        elif lhs.type == T.size or rhs.type == T.size:
-                            typ = T.size
-                        else:
-                            typ = T.int
+                    elif lhs.type == T.index or rhs.type == T.index:
+                        typ = T.index
+                    elif lhs.type == T.size or rhs.type == T.size:
+                        typ = T.size
+                    else:
+                        typ = T.int
 
             else:
                 assert False, f"bad op: '{e.op}'"

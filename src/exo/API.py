@@ -83,10 +83,7 @@ def config(_cls=None, *, readwrite=True):
         )
         return Config(*parser.result(), not readwrite)
 
-    if _cls is None:
-        return parse_config
-    else:
-        return parse_config(_cls)
+    return parse_config if _cls is None else parse_config(_cls)
 
 
 # --------------------------------------------------------------------------- #
@@ -303,8 +300,7 @@ class Procedure(ProcedureBase):
             raise TypeError("expected a pattern string")
 
         _name_count_re = r"^([a-zA-Z_]\w*)\s*(\#\s*[0-9]+)?$"
-        results = re.search(_name_count_re, pattern)
-        if results:
+        if results := re.search(_name_count_re, pattern):
             name, count = results[1], (results[2] if results[2] else "")
             pattern = f"for {name} in _: _{count}"
 

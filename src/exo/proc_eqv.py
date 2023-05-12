@@ -93,9 +93,7 @@ class _UnionFind:
     def union(self, val1, val2):
         p1, p2 = self.find(val1), self.find(val2)
 
-        if p1 is p2:
-            pass  # then val1 and val2 are already unified
-        else:
+        if p1 is not p2:
             self.lookup[p2] = p1
 
     def check_eqv(self, val1, val2):
@@ -111,7 +109,7 @@ class _UnionFind:
 
 _UF_Unv = _UnionFind()
 _UF_Strict = _UnionFind()
-_UF_Unv_key = dict()
+_UF_Unv_key = {}
 
 
 def new_uf_by_eqv_key(key):
@@ -176,5 +174,4 @@ def get_strictest_eqv_proc(proc1, proc2):
 
 
 def get_repr_proc(q_proc):
-    proc = _UF_Strict.find(q_proc)
-    return proc
+    return _UF_Strict.find(q_proc)

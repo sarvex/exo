@@ -130,9 +130,7 @@ class DRAM(Memory):
 
     @classmethod
     def free(cls, new_name, prim_type, shape, srcinfo):
-        if len(shape) == 0:
-            return ""
-        return f"free({new_name});"
+        return "" if len(shape) == 0 else f"free({new_name});"
 
     @classmethod
     def can_read(cls):

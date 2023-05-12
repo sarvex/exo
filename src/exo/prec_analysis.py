@@ -17,9 +17,10 @@ def set_default_prec(name):
     }
     if name not in vals:
         raise TypeError(
-            f"Got {name}, but "
-            "expected one of the following precision types: "
-            + ",".join([k for k in vals])
+            (
+                f"Got {name}, but expected one of the following precision types: "
+                + ",".join(list(vals))
+            )
         )
     _default_prec = vals[name]
 
@@ -55,10 +56,7 @@ class PrecisionAnalysis(LoopIR_Rewrite):
         self._types[name] = typ
 
     def get_type(self, name, default=None):
-        if name not in self._types and default is not None:
-            return default
-        else:
-            return self._types[name]
+        return self._types[name] if name in self._types or default is None else default
 
     def splice_type(self, t, bt):
         if t.is_real_scalar():
@@ -107,7 +105,7 @@ class PrecisionAnalysis(LoopIR_Rewrite):
         elif isinstance(s, (LoopIR.Assign, LoopIR.Reduce)):
             rtyp = result[0].rhs.type
             ltyp = self.get_type(s.name).basetype()
-            assert ltyp != T.err and ltyp != T.R
+            assert ltyp not in [T.err, T.R]
 
             # update the type annotation here if needed
             result[0] = result[0].update(type=ltyp)
@@ -127,12 +125,11 @@ class PrecisionAnalysis(LoopIR_Rewrite):
         elif isinstance(s, LoopIR.WriteConfig):
             rtyp = result[0].rhs.type
             ltyp = s.config.lookup(s.field)[1]
-            assert ltyp != T.err and ltyp != T.R
+            assert ltyp not in [T.err, T.R]
 
             # potentially coerce the entire right-hand-side
-            if rtyp != T.err:
-                if rtyp == T.R:
-                    result[0] = result[0].update(rhs=self.coerce_e(result[0].rhs, ltyp))
+            if rtyp != T.err and rtyp == T.R:
+                result[0] = result[0].update(rhs=self.coerce_e(result[0].rhs, ltyp))
 
         elif isinstance(s, LoopIR.WindowStmt):
             # update the type binding for this symbol...
@@ -210,7 +207,7 @@ class PrecisionAnalysis(LoopIR_Rewrite):
     # the leaves of numeric expressions
     def coerce_e(self, e, btyp):
         if isinstance(e, LoopIR.Const):
-            assert e.type == btyp or e.type == T.R
+            assert e.type in [btyp, T.R]
             return LoopIR.Const(e.val, btyp, e.srcinfo)
         elif isinstance(e, LoopIR.USub):
             arg = e.arg

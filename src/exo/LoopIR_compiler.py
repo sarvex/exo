@@ -93,10 +93,7 @@ def find_all_subprocs(proc_list):
 
 class LoopIR_FindMems(LoopIR_Do):
     def __init__(self, proc):
-        self._mems = set()
-        for a in proc.args:
-            if a.mem:
-                self._mems.add(a.mem)
+        self._mems = {a.mem for a in proc.args if a.mem}
         super().__init__(proc)
 
     def result(self):
@@ -174,7 +171,7 @@ def find_all_mems(proc_list):
     for p in proc_list:
         mems.update(LoopIR_FindMems(p).result())
 
-    return [m for m in mems]
+    return list(mems)
 
 
 def find_all_builtins(proc_list):
@@ -182,7 +179,7 @@ def find_all_builtins(proc_list):
     for p in proc_list:
         builtins.update(LoopIR_FindBuiltIns(p).result())
 
-    return [b for b in builtins]
+    return list(builtins)
 
 
 def find_all_configs(proc_list):
@@ -399,10 +396,7 @@ def _compile_builtins(builtins):
 
 
 def _compile_memories(mems):
-    memory_code = []
-    for m in sorted(mems, key=lambda x: x.name()):
-        memory_code.append(m.global_())
-    return memory_code
+    return [m.global_() for m in sorted(mems, key=lambda x: x.name())]
 
 
 def _compile_context_struct(configs, lib_name):
@@ -445,8 +439,7 @@ class Compiler:
         self.ctxt_name = ctxt_name
         self.env = ChainMap()
         self.names = ChainMap()
-        self.envtyp = dict()
-        self.mems = dict()
+        self.mems = {}
         self._tab = ""
         self._lines = []
         self._scalar_refs = set()
@@ -454,16 +447,15 @@ class Compiler:
         self.window_defns = set()
         self._known_strides = {}
 
+        self.envtyp = {}
         assert self.proc.name is not None, "expected names for compilation"
         name = self.proc.name
-        arg_strs = []
         typ_comments = []
 
         # reserve the first "ctxt" argument
         self.new_varname(Sym("ctxt"), None)
-        arg_strs.append(f"{ctxt_name} *ctxt")
-
-        self.non_const = set(e.buffer for e in proc.eff.writes + proc.eff.reduces)
+        arg_strs = [f"{ctxt_name} *ctxt"]
+        self.non_const = {e.buffer for e in proc.eff.writes + proc.eff.reduces}
 
         for a in proc.args:
             mem = a.mem if a.type.is_numeric() else None
@@ -516,13 +508,14 @@ class Compiler:
 
         # Generate headers here?
         comment = (
-            f"// {name}(\n" + ",\n".join(["//     " + s for s in typ_comments]) + "\n"
+            f"// {name}(\n"
+            + ",\n".join([f"//     {s}" for s in typ_comments])
+            + "\n"
             "// )\n"
         )
-        proc_decl = comment + f"{static_kwd}void {name}( {', '.join(arg_strs)} );\n"
+        proc_decl = f"{comment}{static_kwd}void {name}( {', '.join(arg_strs)} );\n"
         proc_def = (
-            comment
-            + f"{static_kwd}void {name}( {', '.join(arg_strs)} ) {{\n"
+            f"{comment}{static_kwd}void {name}( {', '.join(arg_strs)} ) {{\n"
             + "\n".join(self._lines)
             + "\n"
             "}\n"
@@ -581,38 +574,30 @@ class Compiler:
 
     def new_varname(self, symbol, typ, mem=None):
         strnm = str(symbol)
-        if strnm not in self.names:
-            pass
-        else:
+        if strnm in self.names:
             s = self.names[strnm]
             while s in self.names:
                 m = re.match(r"^(.*)_([0-9]*)$", s)
-                if not m:
-                    s = s + "_1"
-                else:
-                    s = f"{m[1]}_{int(m[2]) + 1}"
+                s = f"{s}_1" if not m else f"{m[1]}_{int(m[2]) + 1}"
             self.names[strnm] = s
             strnm = s
 
         self.names[strnm] = strnm
         self.env[symbol] = strnm
         self.envtyp[symbol] = typ
-        if mem is not None:
-            self.mems[symbol] = mem
-        else:
-            self.mems[symbol] = DRAM
+        self.mems[symbol] = mem if mem is not None else DRAM
         return strnm
 
     def push(self, only=None):
         if only is None:
             self.env = self.env.new_child()
             self.names = self.names.new_child()
-            self._tab = self._tab + "  "
+            self._tab = f"{self._tab}  "
         elif only == "env":
             self.env = self.env.new_child()
             self.names = self.names.new_child()
         elif only == "tab":
-            self._tab = self._tab + "  "
+            self._tab = f"{self._tab}  "
         else:
             assert False, f"BAD only parameter {only}"
 
@@ -626,10 +611,7 @@ class Compiler:
         type = self.envtyp[nm]
         idxs = [self.comp_e(i) for i in idx_list]
         idx_expr = self.get_idx_offset(buf, type, idxs)
-        if not type.is_win():
-            return f"{buf}[{idx_expr}]"
-        else:
-            return f"{buf}.data[{idx_expr}]"
+        return f"{buf}[{idx_expr}]" if not type.is_win() else f"{buf}.data[{idx_expr}]"
 
     def shape_strs(self, shape, prec=100):
         return [self.comp_e(s, prec=prec) for s in shape]
@@ -642,8 +624,7 @@ class Compiler:
         for sz in reversed(szs[:-1]):
             strides.append(s)
             s = f"{sz} * {s}"
-        strides = list(reversed(strides))
-        return strides
+        return list(reversed(strides))
 
     def get_stride(self, name, i):
         if stride := self._known_strides.get((name, i)):
@@ -661,8 +642,7 @@ class Compiler:
     def get_idx_offset(self, name, typ, idx):
         strides = self.get_strides(name, typ, prec=61)
         assert len(strides) == len(idx)
-        acc = " + ".join([f"({i}) * ({s})" for i, s in zip(idx, strides)])
-        return acc
+        return " + ".join([f"({i}) * ({s})" for i, s in zip(idx, strides)])
 
     def get_window_type(self, typ, is_const=None):
         assert isinstance(typ, T.Window) or (
@@ -789,7 +769,7 @@ class Compiler:
             )
             args = [self.comp_fnarg(e, s.f, i) for i, e in enumerate(s.args)]
             if s.f.instr is not None:
-                d = dict()
+                d = {}
                 assert len(s.f.args) == len(args)
                 for i in range(len(args)):
                     arg_name = str(s.f.args[i].name)
@@ -831,9 +811,7 @@ class Compiler:
         elif isinstance(e, LoopIR.WindowExpr):
             if isinstance(fn, LoopIR.proc):
                 callee_buf = fn.args[i].name
-                is_const = callee_buf not in set(
-                    x.buffer for x in fn.eff.writes + fn.eff.reduces
-                )
+                is_const = callee_buf not in {x.buffer for x in fn.eff.writes + fn.eff.reduces}
             else:
                 raise NotImplementedError("Passing windows to built-ins")
             win_struct = self.get_window_type(e.type, is_const)

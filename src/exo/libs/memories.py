@@ -28,10 +28,7 @@ class MDRAM(DRAM):
 
     @classmethod
     def free(cls, new_name, prim_type, shape, srcinfo):
-        if len(shape) == 0:
-            return ""
-
-        return f"free_dram({new_name});"
+        return "" if len(shape) == 0 else f"free_dram({new_name});"
 
 
 # ----------- DRAM using static memory ----------------
@@ -90,10 +87,7 @@ class GEMM_SCRATCH(Memory):
 
     @classmethod
     def free(cls, new_name, prim_type, shape, srcinfo):
-        if len(shape) == 0:
-            return ""
-
-        return f"gemm_free((uint64_t)({new_name}));"
+        return "" if len(shape) == 0 else f"gemm_free((uint64_t)({new_name}));"
 
     @classmethod
     def window(cls, basetyp, baseptr, indices, strides, srcinfo):
@@ -143,9 +137,7 @@ class GEMM_ACCUM(Memory):
 
     @classmethod
     def free(cls, new_name, prim_type, shape, srcinfo):
-        if len(shape) == 0:
-            return ""
-        return f"gemm_acc_free((uint32_t)({new_name}));"
+        return "" if len(shape) == 0 else f"gemm_acc_free((uint32_t)({new_name}));"
 
     @classmethod
     def window(cls, basetyp, baseptr, indices, strides, srcinfo):
@@ -176,7 +168,7 @@ class AVX2(Memory):
 
         vec_types = {"float": (8, "__m256"), "double": (4, "__m256d")}
 
-        if not prim_type in vec_types.keys():
+        if prim_type not in vec_types:
             raise MemGenError(f"{srcinfo}: AVX2 vectors must be f32/f64 (for now)")
 
         reg_width, C_reg_type_name = vec_types[prim_type]
@@ -184,12 +176,11 @@ class AVX2(Memory):
             raise MemGenError(
                 f"{srcinfo}: AVX2 vectors of type {prim_type} must be {reg_width}-wide, got {shape}"
             )
-        shape = shape[:-1]
-        if shape:
-            result = f'{C_reg_type_name} {new_name}[{"][".join(map(str, shape))}];'
-        else:
-            result = f"{C_reg_type_name} {new_name};"
-        return result
+        return (
+            f'{C_reg_type_name} {new_name}[{"][".join(map(str, shape))}];'
+            if (shape := shape[:-1])
+            else f"{C_reg_type_name} {new_name};"
+        )
 
     @classmethod
     def can_read(cls):
@@ -224,16 +215,15 @@ class AVX512(Memory):
     def alloc(cls, new_name, prim_type, shape, srcinfo):
         if not shape:
             raise MemGenError(f"{srcinfo}: AVX512 vectors are not scalar values")
-        if not prim_type == "float":
+        if prim_type != "float":
             raise MemGenError(f"{srcinfo}: AVX512 vectors must be f32 (for now)")
         if not _is_const_size(shape[-1], 16):
             raise MemGenError(f"{srcinfo}: AVX512 vectors must be 16-wide")
-        shape = shape[:-1]
-        if shape:
-            result = f'__m512 {new_name}[{"][".join(map(str, shape))}];'
-        else:
-            result = f"__m512 {new_name};"
-        return result
+        return (
+            f'__m512 {new_name}[{"][".join(map(str, shape))}];'
+            if (shape := shape[:-1])
+            else f"__m512 {new_name};"
+        )
 
     @classmethod
     def free(cls, new_name, prim_type, shape, srcinfo):

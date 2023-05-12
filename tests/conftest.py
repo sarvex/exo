@@ -204,15 +204,15 @@ class Compiler:
 
         self._run_command(
             [
-                f"ctest",
-                f"-C",
-                f"Release",
-                f"--build-and-test",
+                "ctest",
+                "-C",
+                "Release",
+                "--build-and-test",
                 f"{self.workdir}",
                 f'{self.workdir / "build"}',
-                f"--build-generator",
+                "--build-generator",
                 f'{os.getenv("CMAKE_GENERATOR", default="Ninja")}',
-                f"--build-options",
+                "--build-options",
                 *(f"-D{arg}={value}" for arg, value in kwargs.items()),
             ],
             skip_on_fail,
@@ -302,7 +302,7 @@ def get_cpu_features() -> Set[str]:
             try:
                 cpuinfo = Path("/proc/cpuinfo").read_text()
                 if m := re.search(r"^flags\s*:(.+)$", cpuinfo, re.MULTILINE):
-                    return m.group(1)
+                    return m[1]
             except IOError:
                 return ""
         elif platform.system() == "Darwin":
@@ -318,7 +318,7 @@ def get_cpu_features() -> Set[str]:
                 r"^hw\.optional\.([^:]+): [^0]\d*$", arm_features, re.MULTILINE
             )
 
-            return x86_features + " " + " ".join(arm_features)
+            return f"{x86_features} " + " ".join(arm_features)
         elif platform.system() == "Windows":
             return ""  # TODO: implement checking for Windows
         else:
